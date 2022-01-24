@@ -142,6 +142,38 @@ contract SequencerTest is DSTest, Vm, Utilities {
     }
 
     /**
+     * `burn`
+     */
+
+    function testBurn() public {
+        mint(address(this), 1e18);
+
+        tokeVotePool.approve(address(sequencer), 1e18);
+        sequencer.push(170, 1643324400);
+        sequencer.mint(address(this), 1e18);
+        assertEq(tokeVotePool.balanceOf(address(this)), 0);
+        sequencer.burn(address(this), 1e18);
+        assertEq(tokeVotePool.balanceOf(address(this)), 1e18);
+    }
+
+    function testBurnWhenFilled() public {
+        mint(address(this), 1e18);
+        tokeVotePool.approve(address(sequencer), 1e18);
+        sequencer.push(170, 1643324400);
+        sequencer.mint(address(this), 1e18);
+        sequencer.fill(0);
+        mint(address(reactor), 1e18);
+
+        assertEq(tokeVotePool.balanceOf(address(this)), 0);
+        sequencer.burn(address(this), 5e17);
+        assertEq(tokeVotePool.balanceOf(address(this)), 5e17);
+
+        assertEq(reactor.balanceOf(address(this)), 0);
+        sequencer.join(address(this));
+        assertEq(reactor.balanceOf(address(this)), 1e18);
+    }
+
+    /**
      * `fill`
      */
 

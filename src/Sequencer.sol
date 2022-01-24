@@ -186,11 +186,9 @@ contract Sequencer is ERC20Restricted, Auth, Pause, Lock {
             revert Dust();
 
         uint256 idx = balances[msg.sender].idx;
-        uint256 shares = amount * epochs[idx].shares / epochs[idx].tokens;
 
         supply -= amount;
         epochs[idx].tokens -= amount.u104();
-        epochs[idx].shares -= shares.u104();
         balances[msg.sender].amount -= amount.u224();
 
         if (balances[msg.sender].amount == 0)
@@ -199,8 +197,8 @@ contract Sequencer is ERC20Restricted, Auth, Pause, Lock {
         if (!epochs[idx].filled) {
             IReactor(reactor).unload(to, amount);
         } else {
-            // this path can be used to retrieve sequencing tokens that are stuck due when shares
-            // are zero.
+            // this path can be used to retrieve sequencing tokens that are stuck when shares are zero.
+            // should not happen if `dust` is set sufficiently high
             address[] memory targets = new address[](1);
             bytes[] memory datas = new bytes[](1);
             targets[0] = derivative;
