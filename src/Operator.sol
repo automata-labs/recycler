@@ -88,7 +88,10 @@ contract Operator is Auth {
         _claim(recipient, v, r, s);
     }
 
-    function deposit(uint256 amount) external auth {
+    function deposit(uint256 amount)
+        external
+        auth
+    {
         _deposit(amount);
     }
 
