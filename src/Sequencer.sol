@@ -15,14 +15,17 @@ contract Sequencer is ERC20Restricted, Auth, Pause {
     using Cast for uint128;
     using SafeTransfer for address;
 
+    event Exited(address indexed sender);
     event Joined(address indexed sender);
     event Filled(address indexed sender, uint256 idx);
     event EpochCreated(uint256 indexed index, uint256 indexed cycle, uint32 deadline);
 
-    error BadEpoch();
+    error Discontinuity();
     error Dust();
     error InsufficientExchange();
     error EmptyBalance();
+    error EpochExpired();
+    error EpochNotFilled();
     error NonEmptyBalance();
     error PollEmpty();
     error Unauthorized();
@@ -140,11 +143,13 @@ contract Sequencer is ERC20Restricted, Auth, Pause {
             revert Zero();
 
         if (epochs[index()].deadline < _blockTimestamp())
-            revert BadEpoch();
+            revert EpochExpired();
 
         if (balances[to].amount + amount < dust)
             revert Dust();
 
+        // account will have to `join` first to empty the balance
+        // each balance can only hold one instance of an epoch deposit
         if (!(balances[to].idx == index() || balances[to].amount == 0))
             revert NonEmptyBalance();
 
@@ -176,17 +181,29 @@ contract Sequencer is ERC20Restricted, Auth, Pause {
         if (0 < balances[msg.sender].amount && balances[msg.sender].amount < dust)
             revert Dust();
 
-        uint256 shares;
         uint256 idx = balances[msg.sender].idx;
-
-        if (epochs[idx].filled)
-            shares = amount * epochs[idx].shares / epochs[idx].tokens;
+        uint256 shares = amount * epochs[idx].shares / epochs[idx].tokens;
 
         supply -= amount;
         epochs[idx].tokens -= amount.u104();
         epochs[idx].shares -= shares.u104();
         balances[msg.sender].amount -= amount.u224();
-        IReactor(reactor).unload(to, amount);
+
+        if (balances[msg.sender].amount == 0)
+            delete balances[msg.sender];
+
+        if (!epochs[idx].filled) {
+            IReactor(reactor).unload(to, amount);
+        } else {
+            // this path can be used to retrieve sequencing tokens that are stuck due when shares
+            // are zero.
+            address[] memory targets = new address[](1);
+            bytes[] memory datas = new bytes[](1);
+            targets[0] = derivative;
+            datas[0] = abi.encodeWithSelector(IERC20.transfer.selector, to, amount);
+
+            IReactor(reactor).execute(targets, datas);
+        }
 
         emit Transfer(msg.sender, address(0), amount);
     }
@@ -196,8 +213,9 @@ contract Sequencer is ERC20Restricted, Auth, Pause {
         external
         auth
     {
+        // check that previous epoch has been filled
         if (idx > 0 && !epochs[idx - 1].filled)
-            revert BadEpoch();
+            revert Discontinuity();
         
         uint256 shares = IReactor(reactor).mint(address(this), epochs[idx].tokens);
         epochs[idx].shares = shares.u104();
@@ -215,11 +233,14 @@ contract Sequencer is ERC20Restricted, Auth, Pause {
         uint256 idx = balances[msg.sender].idx;
         uint256 amount = balances[msg.sender].amount;
 
+        // check that epoch has been filled with shares
         if (!epochs[idx].filled)
-            revert BadEpoch();
+            revert EpochNotFilled();
 
         shares = amount * epochs[idx].shares / epochs[idx].tokens;
 
+        // if shares are zero, the sequencing tokens are stuck
+        // should not happen if `dust` is set sufficiently high
         if (shares == 0)
             revert InsufficientExchange();
         
@@ -237,6 +258,8 @@ contract Sequencer is ERC20Restricted, Auth, Pause {
     function loadCallback(bytes memory data)
         external
     {
+        // only reactor can pull funds
+        // this is to load the tokens into the buffer to prepare for the next cycle
         if (msg.sender != reactor)
             revert Unauthorized();
             

@@ -122,15 +122,23 @@ contract SequencerTest is DSTest, Vm, Utilities {
     }
 
     function testMintDifferentEpochRevert() public {
-        tokeVotePool.approve(address(sequencer), 1e18);
-
         mint(address(this), 1e18);
+
+        tokeVotePool.approve(address(sequencer), 1e18);
         sequencer.push(170, 1643324400);
         sequencer.mint(address(this), 5e17);
 
         sequencer.push(171, 1643324400);
         expectRevert(abi.encodeWithSignature("NonEmptyBalance()"));
         sequencer.mint(address(this), 5e17);
+    }
+
+    function testMintDeadlineRevert() public {
+        mint(address(this), 1e18);
+        tokeVotePool.approve(address(sequencer), 1e18);
+        sequencer.push(170, uint32(block.timestamp - 1));
+        expectRevert(abi.encodeWithSignature("EpochExpired()"));
+        sequencer.mint(address(this), 1e18);
     }
 
     /**
@@ -201,7 +209,7 @@ contract SequencerTest is DSTest, Vm, Utilities {
         sequencer.mint(address(user1), 1e18);
         stopPrank();
 
-        expectRevert(abi.encodeWithSignature("BadEpoch()"));
+        expectRevert(abi.encodeWithSignature("Discontinuity()"));
         sequencer.fill(1);
     }
 
