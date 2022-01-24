@@ -4,13 +4,14 @@ pragma solidity ^0.8.0;
 import "./libraries/Auth.sol";
 import "./libraries/Cast.sol";
 import "./libraries/ERC20Restricted.sol";
+import "./libraries/Lock.sol";
 import "./libraries/Pause.sol";
 import "./libraries/SafeTransfer.sol";
 import "./interfaces/external/ITokeVotePool.sol";
 import "./interfaces/ICallback.sol";
 import "./interfaces/IReactor.sol";
 
-contract Sequencer is ERC20Restricted, Auth, Pause {
+contract Sequencer is ERC20Restricted, Auth, Pause, Lock {
     using Cast for uint256;
     using Cast for uint128;
     using SafeTransfer for address;
@@ -128,6 +129,7 @@ contract Sequencer is ERC20Restricted, Auth, Pause {
 
     function push(uint256 currentCycle, uint32 deadline)
         external
+        lock
         auth
     {
         epochs.push(Epoch({ deadline: deadline, tokens: 0, shares: 0, filled: false }));
@@ -136,6 +138,7 @@ contract Sequencer is ERC20Restricted, Auth, Pause {
 
     function mint(address to, uint256 amount)
         external
+        lock
         noauth
         playback
     {
@@ -170,6 +173,7 @@ contract Sequencer is ERC20Restricted, Auth, Pause {
 
     function burn(address to, uint256 amount)
         external
+        lock
         noauth
     {
         if (amount == 0)
@@ -211,6 +215,7 @@ contract Sequencer is ERC20Restricted, Auth, Pause {
     /// @notice Claim up until an epoch using a IPFS hash and mint shares for that same epoch.
     function fill(uint256 idx)
         external
+        lock
         auth
     {
         // check that previous epoch has been filled
@@ -227,6 +232,7 @@ contract Sequencer is ERC20Restricted, Auth, Pause {
     /// @notice Burn sequencing tokens to get shares from the reactor.
     function join(address to)
         external
+        lock
         noauth
         returns (uint256 shares)
     {
