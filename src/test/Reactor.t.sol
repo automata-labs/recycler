@@ -187,4 +187,40 @@ contract ReactorTest is DSTest, Vm, Utilities {
         expectRevert("Denied");
         reactor.mint(address(this), 1);
     }
+
+    /**
+     * `burn`
+     */
+
+    function testBurn() public {
+        mint(address(this), 1e18);
+        sequencer.load(1e18);
+        reactor.mint(address(this), 1e18);
+
+        assertEq(reactor.balanceOf(address(this)), 1e18);
+        reactor.burn(address(this), address(this), 1e18);
+        assertEq(reactor.balanceOf(address(this)), 0);
+        assertEq(tokeVotePool.balanceOf(address(this)), 1e18);
+    }
+
+    function testBurnWithApproval() public {
+        mint(address(this), 1e18);
+        sequencer.load(1e18);
+        reactor.mint(address(this), 1e18);
+        reactor.approve(address(user0), type(uint256).max);
+        prank(address(user0));
+        reactor.burn(address(this), address(user0), 1e18);
+        assertEq(reactor.balanceOf(address(this)), 0);
+        assertEq(tokeVotePool.balanceOf(address(user0)), 1e18);
+    }
+
+    function testBurnNoAllowanceRevert() public {
+        mint(address(this), 1e18);
+        sequencer.load(1e18);
+        reactor.mint(address(this), 1e18);
+        startPrank(address(user0));
+        expectRevert("ERC20: Insufficient approval");
+        reactor.burn(address(this), address(user0), 1e18);
+        stopPrank();
+    }
 }

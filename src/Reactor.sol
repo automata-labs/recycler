@@ -159,6 +159,10 @@ contract Reactor is ERC20Permit, Auth, Lock {
         }
     }
 
+    /**
+     * Internal
+     */
+
     function _balance(address token_) internal view returns (uint256 balance) {
         (bool success, bytes memory returndata) = token_.staticcall(
             abi.encodeWithSelector(IERC20.balanceOf.selector, address(this))

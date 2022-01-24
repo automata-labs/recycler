@@ -210,8 +210,8 @@ contract SequencerTest is DSTest, Vm, Utilities {
      */
 
     function testJoin() public {
-        tokeVotePool.approve(address(sequencer), 1e18);
         mint(address(this), 1e18);
+        tokeVotePool.approve(address(sequencer), 1e18);
         sequencer.push(170, 1643324400);
         sequencer.mint(address(this), 1e18);
         sequencer.fill(0);
@@ -225,8 +225,8 @@ contract SequencerTest is DSTest, Vm, Utilities {
         sequencer.push(170, 1643324400);
 
         startPrank(address(user0));
-        tokeVotePool.approve(address(sequencer), 1e18);
         mint(address(user0), 1e18);
+        tokeVotePool.approve(address(sequencer), 1e18);
         sequencer.mint(address(user0), 1e18);
         stopPrank();
 
@@ -241,14 +241,14 @@ contract SequencerTest is DSTest, Vm, Utilities {
         sequencer.push(171, 1643324400);
 
         startPrank(address(user1));
-        tokeVotePool.approve(address(sequencer), 3e18);
         mint(address(user1), 3e18);
+        tokeVotePool.approve(address(sequencer), 3e18);
         sequencer.mint(address(user1), 3e18);
         stopPrank();
 
         startPrank(address(user2));
-        tokeVotePool.approve(address(sequencer), 2e18);
         mint(address(user2), 2e18);
+        tokeVotePool.approve(address(sequencer), 2e18);
         sequencer.mint(address(user2), 2e18);
         stopPrank();
 
@@ -269,8 +269,8 @@ contract SequencerTest is DSTest, Vm, Utilities {
         sequencer.push(170, 1643324400);
 
         startPrank(address(user0));
-        tokeVotePool.approve(address(sequencer), 1e18);
         mint(address(user0), 1e18);
+        tokeVotePool.approve(address(sequencer), 1e18);
         sequencer.mint(address(user0), 1e18);
         stopPrank();
 
@@ -285,14 +285,14 @@ contract SequencerTest is DSTest, Vm, Utilities {
         sequencer.push(171, 1643324400);
 
         startPrank(address(user1));
-        tokeVotePool.approve(address(sequencer), 3e18);
         mint(address(user1), 3e18);
+        tokeVotePool.approve(address(sequencer), 3e18);
         sequencer.mint(address(user1), 3e18);
         stopPrank();
 
         startPrank(address(user2));
-        tokeVotePool.approve(address(sequencer), 2e18);
         mint(address(user2), 2e18);
+        tokeVotePool.approve(address(sequencer), 2e18);
         sequencer.mint(address(user2), 2e18);
         stopPrank();
 
@@ -307,5 +307,21 @@ contract SequencerTest is DSTest, Vm, Utilities {
         assertEq(reactor.balanceOf(address(user2)), 1e18);
 
         assertEq(reactor.balanceOf(address(sequencer)), 0);
+    }
+
+    function testJoinAndBurnShare() public {
+        mint(address(this), 1e18);
+        tokeVotePool.approve(address(sequencer), 1e18);
+        sequencer.push(170, 1643324400);
+        sequencer.mint(address(this), 1e18);
+        sequencer.fill(0);
+
+        assertEq(reactor.balanceOf(address(sequencer)), 1e18);
+        sequencer.join(address(this));
+        assertEq(reactor.balanceOf(address(this)), 1e18);
+
+        reactor.burn(address(this), address(this), 1e18);
+        assertEq(reactor.balanceOf(address(this)), 0);
+        assertEq(tokeVotePool.balanceOf(address(this)), 1e18);
     }
 }
