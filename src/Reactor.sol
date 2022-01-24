@@ -138,7 +138,6 @@ contract Reactor is IReactor, ERC20Permit, Auth, Lock {
     /// @inheritdoc IReactor
     function execute(address[] calldata targets, bytes[] calldata datas)
         external
-        lock
         auth
         returns (bytes[] memory results)
     {
