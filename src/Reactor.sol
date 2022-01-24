@@ -14,8 +14,10 @@ import "./interfaces/external/IOnChainVoteL1.sol";
 import "./interfaces/external/IRewards.sol";
 import "./interfaces/external/ITokeVotePool.sol";
 import "./interfaces/ICallback.sol";
+import "./interfaces/IReactor.sol";
 
-contract Reactor is ERC20Permit, Auth, Lock {
+/// @title Reactor
+contract Reactor is IReactor, ERC20Permit, Auth, Lock {
     using SafeTransfer for address;
 
     /// @notice Reverts when there's insufficient tokens in the buffer.
@@ -38,13 +40,11 @@ contract Reactor is ERC20Permit, Auth, Lock {
     /// @notice Emitted when tokens are unloaded from the buffer.
     event Unload(address indexed account, uint256 amount);
 
-    /// @notice The `tTOKE` token address.
+    /// @inheritdoc IReactor
     address public immutable token;
-    /// @notice The amount of shares that are locked on a fresh `mint`.
+    /// @inheritdoc IReactor
     uint96 public immutable dust;
-    /// @notice The amount of tokens that are being queued for the next cycle(s).
-    /// @dev This differentiates the queued- and joined token amounts from each other. Because
-    ///     rewards are distrbuted every week by the Tokemak Labs team, tokens needs to queued first.
+    /// @inheritdoc IReactor
     uint256 public buffer;
 
     constructor(address token_, uint96 dust_) ERC20Permit(
@@ -56,6 +56,7 @@ contract Reactor is ERC20Permit, Auth, Lock {
         dust = dust_;
     }
 
+    /// @inheritdoc IReactor
     function load(uint256 amount, bytes memory data)
         external
         lock
@@ -71,6 +72,7 @@ contract Reactor is ERC20Permit, Auth, Lock {
         emit Load(msg.sender, amount);
     }
 
+    /// @inheritdoc IReactor
     function unload(address to, uint256 amount)
         external
         lock
@@ -84,7 +86,7 @@ contract Reactor is ERC20Permit, Auth, Lock {
         emit Unload(msg.sender, amount);
     }
 
-    /// @dev Mints shares from the queued tokens.
+    /// @inheritdoc IReactor
     function mint(address to, uint256 amount)
         external
         lock
@@ -112,7 +114,7 @@ contract Reactor is ERC20Permit, Auth, Lock {
         emit Mint(msg.sender, amount);
     }
 
-    /// @notice Burn shares to redeem a portion of the reserve.
+    /// @inheritdoc IReactor
     function burn(address from, address to, uint256 shares)
         external
         lock
@@ -133,8 +135,7 @@ contract Reactor is ERC20Permit, Auth, Lock {
         emit Burn(msg.sender, amount);
     }
 
-    /// @notice Execute arbitrary calls.
-    /// @dev Used mainly for voting, approving, claiming and staking rewards.
+    /// @inheritdoc IReactor
     function execute(address[] calldata targets, bytes[] calldata datas)
         external
         lock

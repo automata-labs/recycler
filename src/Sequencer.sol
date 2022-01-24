@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.0;
 
+import "./libraries/data/Balance.sol";
+import "./libraries/data/Epoch.sol";
 import "./libraries/Auth.sol";
 import "./libraries/Cast.sol";
 import "./libraries/ERC20Restricted.sol";
@@ -9,28 +11,42 @@ import "./libraries/Pause.sol";
 import "./libraries/SafeTransfer.sol";
 import "./interfaces/external/ITokeVotePool.sol";
 import "./interfaces/ICallback.sol";
+import "./interfaces/ISequencer.sol";
 import "./interfaces/IReactor.sol";
 
-contract Sequencer is ERC20Restricted, Auth, Pause, Lock {
+/// @title Sequencer
+contract Sequencer is ISequencer, ERC20Restricted, Auth, Pause, Lock {
     using Cast for uint256;
     using Cast for uint128;
     using SafeTransfer for address;
 
-    event Exited(address indexed sender);
+    /// @notice Emitted when tokens are joined into shares.
     event Joined(address indexed sender);
+    /// @notice Emitted when an epoch is called to be filled.
     event Filled(address indexed sender, uint256 idx);
+    /// @notice Emitted when an epoch is created.
     event EpochCreated(uint256 indexed index, uint256 indexed cycle, uint32 deadline);
 
+    /// @notice Thrown when an epoch to be filled that has it's previous neighbour non-filled,
+    ///     making the epoch-chain discontinous.
     error Discontinuity();
+    /// @notice Thrown when a balance has less than `dust` amount `amount` for any call.
     error Dust();
+    /// @notice Thrown when shares are zero in some exchange.
     error InsufficientExchange();
+    /// @notice Thrown when balance is empty when a call requires a non-empty balance
     error EmptyBalance();
+    /// @notice Thrown when epoch's deadline has expired.
     error EpochExpired();
+    /// @notice Thrown when is not filled, so `fill` cannot be called.
     error EpochNotFilled();
+    /// @notice Thrown when balance is non-emtpy, for when a balance need to be empty for e.g. `mint`.
     error NonEmptyBalance();
-    error PollEmpty();
+    /// @notice Thrown when the `msg.sender` is unauthorized w.r.t. address.
     error Unauthorized();
+    /// @notice Thrown when the epochs array is empty.
     error Undefined();
+    /// @notice Thrown when `amount` param is zero.
     error Zero();
 
     struct LoadCallbackData {
@@ -40,30 +56,14 @@ contract Sequencer is ERC20Restricted, Auth, Pause, Lock {
         uint256 amount;
     }
 
-    struct Balance {
-        uint32 idx;
-        uint224 amount;
-    }
-
-    struct Epoch {
-        /// @dev The timestamp in which this epoch becomes outdated.
-        uint32 deadline;
-        /// @dev The total amount of tokens deposited during this epoch (batch of cycles).
-        uint104 tokens;
-        /// @dev The total shares redeemable by the depositors during this cycle.
-        uint104 shares;
-        /// @dev If the epoch has been filled with shares.
-        bool filled;
-    }
-
-    /// @notice The total supply of queued tokens.
+    /// @inheritdoc ISequencer
     uint256 public supply;
-    /// @dev The mapping from address to queued balance.
-    mapping(address => Balance) internal balances;
+    /// @inheritdoc ISequencer
+    mapping(address => Balance.Data) public balances;
 
     /// @notice The core reactor contract that holds the assets.
     address public immutable reactor;
-    /// @notice The derivative token.
+    /// @notice The underlying token.
     address public immutable underlying;
     /// @notice The derivative token.
     address public immutable derivative;
@@ -71,8 +71,8 @@ contract Sequencer is ERC20Restricted, Auth, Pause, Lock {
     /// @notice The minimum amount of tokens that needs to be queued.
     /// @dev This is to avoid the shares amount from reverting when filling.
     uint256 public dust;
-    /// @dev The epochs - can be discontinuous.
-    Epoch[] public epochs;
+    /// @dev The epochs - cannot be discontinuous.
+    Epoch.Data[] public epochs;
 
     constructor(
         address reactor_,
@@ -95,19 +95,21 @@ contract Sequencer is ERC20Restricted, Auth, Pause, Lock {
      */
 
     /// @inheritdoc IERC20
-    function totalSupply() external view override returns (uint256) {
+    function totalSupply() external view override(ERC20Restricted, IERC20) returns (uint256) {
         return supply;
     }
 
     /// @inheritdoc IERC20
-    function balanceOf(address account) external view override returns (uint256) {
+    function balanceOf(address account) external view override(ERC20Restricted, IERC20) returns (uint256) {
         return balances[account].amount;
     }
 
+    /// @inheritdoc ISequencer
     function cardinality() public view returns (uint256) {
         return epochs.length;
     }
 
+    /// @inheritdoc ISequencer
     function index() public view returns (uint256) {
         if (epochs.length > 0)
             return epochs.length - 1;
@@ -115,11 +117,13 @@ contract Sequencer is ERC20Restricted, Auth, Pause, Lock {
             revert Undefined();
     }
 
-    function epoch() external view returns (Epoch memory) {
+    /// @inheritdoc ISequencer
+    function epoch() external view returns (Epoch.Data memory) {
         return epochs[epochs.length - 1];
     }
 
-    function epochAt(uint256 idx) external view returns (Epoch memory) {
+    /// @inheritdoc ISequencer
+    function epochAt(uint256 idx) external view returns (Epoch.Data memory) {
         return epochs[idx];
     }
 
@@ -127,15 +131,17 @@ contract Sequencer is ERC20Restricted, Auth, Pause, Lock {
      * Core
      */
 
+    /// @inheritdoc ISequencer
     function push(uint256 currentCycle, uint32 deadline)
         external
         lock
         auth
     {
-        epochs.push(Epoch({ deadline: deadline, tokens: 0, shares: 0, filled: false }));
+        epochs.push(Epoch.Data({ deadline: deadline, tokens: 0, shares: 0, filled: false }));
         emit EpochCreated(epochs.length - 1, currentCycle, deadline);
     }
 
+    /// @inheritdoc ISequencer
     function mint(address to, uint256 amount)
         external
         lock
@@ -171,6 +177,7 @@ contract Sequencer is ERC20Restricted, Auth, Pause, Lock {
         emit Transfer(address(0), to, amount);
     }
 
+    /// @inheritdoc ISequencer
     function burn(address to, uint256 amount)
         external
         lock
@@ -210,7 +217,7 @@ contract Sequencer is ERC20Restricted, Auth, Pause, Lock {
         emit Transfer(msg.sender, address(0), amount);
     }
 
-    /// @notice Claim up until an epoch using a IPFS hash and mint shares for that same epoch.
+    /// @inheritdoc ISequencer
     function fill(uint256 idx)
         external
         lock
@@ -227,7 +234,7 @@ contract Sequencer is ERC20Restricted, Auth, Pause, Lock {
         emit Filled(msg.sender, idx);
     }
 
-    /// @notice Burn sequencing tokens to get shares from the reactor.
+    /// @inheritdoc ISequencer
     function join(address to)
         external
         lock

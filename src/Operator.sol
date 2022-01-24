@@ -7,20 +7,22 @@ import "./interfaces/external/IOnChainVoteL1.sol";
 import "./interfaces/external/IRewards.sol";
 import "./interfaces/external/IRewardsHash.sol";
 import "./interfaces/external/ITokeVotePool.sol";
+import "./interfaces/IOperator.sol";
 import "./interfaces/IReactor.sol";
 
-contract Operator is Auth {
-    /// @notice The core reactor contract that holds the assets.
+/// @title Operator
+contract Operator is IOperator, Auth {
+    /// @inheritdoc IOperator
     address public immutable reactor;
-    /// @notice The derivative token.
+    /// @inheritdoc IOperator
     address public immutable underlying;
-    /// @notice The derivative token.
+    /// @inheritdoc IOperator
     address public immutable derivative;
-    /// @notice The Tokemak voting contract.
+    /// @inheritdoc IOperator
     address public immutable onchainvote;
-    /// @notice The Tokemak rewards contract.
+    /// @inheritdoc IOperator
     address public immutable rewards;
-    /// @notice The Tokemak cycle hash contract.
+    /// @inheritdoc IOperator
     address public immutable rewardsHash;
 
     constructor(
@@ -39,8 +41,7 @@ contract Operator is Auth {
         rewardsHash = rewardsHash_;
     }
 
-    /// @notice Approves the tTOKE to pull TOKE tokens from this contract.
-    /// @dev If not called before `compound`, then `compound` will revert.
+    /// @inheritdoc IOperator
     function prepare(uint256 amount)
         external
         auth
@@ -53,7 +54,7 @@ contract Operator is Auth {
         IReactor(reactor).execute(targets, datas);
     }
 
-    /// @notice Claims- and stakes the token rewards to compound the assets.
+    /// @inheritdoc IOperator
     function compound(Recipient memory recipient, uint8 v, bytes32 r, bytes32 s)
         external
         auth
@@ -69,6 +70,7 @@ contract Operator is Auth {
         _deposit(claimable);
     }
 
+    /// @inheritdoc IOperator
     function vote(UserVotePayload calldata data)
         external
         auth
@@ -81,6 +83,7 @@ contract Operator is Auth {
         IReactor(reactor).execute(targets, datas);
     }
 
+    /// @inheritdoc IOperator
     function claim(Recipient memory recipient, uint8 v, bytes32 r, bytes32 s)
         external
         auth
@@ -88,6 +91,7 @@ contract Operator is Auth {
         _claim(recipient, v, r, s);
     }
 
+    /// @inheritdoc IOperator
     function deposit(uint256 amount)
         external
         auth
