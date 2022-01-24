@@ -22,4 +22,7 @@ jobs:
           version: nightly
 
       - name: Run tests
-        run: forge test -vvv
+        shell: bash
+        env:
+          ALCHEMY_API_URI: ${{ secrets.ALCHEMY_API_URI }}
+        run: forge test -vvv --force --fork-url "$ALCHEMY_API_URI" --fork-block-number 14068398
