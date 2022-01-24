@@ -93,7 +93,7 @@ contract ReactorTest is DSTest, Vm, Utilities {
      */
 
     function testLoad() public {
-        tTOKEMint(address(this), 1e18);
+        mint(address(this), 1e18);
 
         assertEq(tokeVotePool.balanceOf(address(reactor)), 0);
         assertEq(reactor.buffer(), 0);
@@ -106,7 +106,7 @@ contract ReactorTest is DSTest, Vm, Utilities {
     }
 
     function testLoadInsufficientTransferRevert() public {
-        tTOKEMint(address(this), 1e18);
+        mint(address(this), 1e18);
         expectRevert(abi.encodeWithSignature("InsufficientTransfer()"));
         sequencerRevert.load(1e18 + 1);
     }
@@ -122,7 +122,7 @@ contract ReactorTest is DSTest, Vm, Utilities {
      */
 
     function testUnload() public {
-        tTOKEMint(address(this), 1e18);
+        mint(address(this), 1e18);
 
         sequencer.load(1e18);
         reactor.unload(address(user0), 3e17);
@@ -135,7 +135,7 @@ contract ReactorTest is DSTest, Vm, Utilities {
     }
 
     function testUnloadInsufficientRevert() public {
-        tTOKEMint(address(this), 1e18);
+        mint(address(this), 1e18);
 
         sequencer.load(1e18);
         expectRevert(abi.encodeWithSignature("InsufficientBuffer()"));
@@ -153,7 +153,7 @@ contract ReactorTest is DSTest, Vm, Utilities {
      */
 
     function testMint() public {
-        tTOKEMint(address(this), 1e18);
+        mint(address(this), 1e18);
         
         sequencer.load(1e18);
         reactor.mint(address(this), 1e18);
@@ -168,19 +168,19 @@ contract ReactorTest is DSTest, Vm, Utilities {
     }
 
     function testMintInsufficientBufferRevert() public {
-        tTOKEMint(address(this), 100_000);
+        mint(address(this), 100_000);
         sequencer.load(100_000);
         reactor.mint(address(this), 100_000);
-        tTOKEMint(address(reactor), 100 * 1e18);
+        mint(address(reactor), 100 * 1e18);
 
-        tTOKEMint(address(this), 1);
+        mint(address(this), 1);
         sequencer.load(1);
         expectRevert(abi.encodeWithSignature("InsufficientExchange()"));
         reactor.mint(address(this), 1);
     }
 
     function testMintAuthRevert() public {
-        tTOKEMint(address(this), 1);
+        mint(address(this), 1);
         sequencer.load(1);
 
         reactor.deny(address(this));

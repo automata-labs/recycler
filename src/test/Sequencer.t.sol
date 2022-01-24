@@ -26,14 +26,13 @@ contract SequencerTest is DSTest, Vm, Utilities {
     function setUp() public {
         user0 = new User();
         user1 = new User();
+        user2 = new User();
 
         reactor = new Reactor(address(tokeVotePool), 0);
         sequencer = new Sequencer(
             address(reactor),
-            address(0),
+            address(toke),
             address(tokeVotePool),
-            address(rewards),
-            address(rewardsHash),
             100
         );
 
@@ -49,7 +48,7 @@ contract SequencerTest is DSTest, Vm, Utilities {
 
     function testConstructor() public {
         assertEq(sequencer.name(), "Sequencing Automata TokemakTokePool");
-        assertEq(sequencer.symbol(), "SAtTOKE");
+        assertEq(sequencer.symbol(), "SAtToke");
         assertEq(sequencer.reactor(), address(reactor));
     }
 
@@ -58,24 +57,36 @@ contract SequencerTest is DSTest, Vm, Utilities {
      */
 
     function testMint() public {
-        tTOKEMint(address(this), 1e18);
+        mint(address(this), 1e18);
+
         tokeVotePool.approve(address(sequencer), 1e18);
+        sequencer.push(170, 1643324400);
         sequencer.mint(address(this), 1e18);
+
         assertEq(tokeVotePool.balanceOf(address(reactor)), 1e18);
         assertEq(tokeVotePool.balanceOf(address(sequencer)), 0);
         assertEq(reactor.buffer(), 1e18);
-
         assertEq(sequencer.balanceOf(address(this)), 1e18);
         assertEq(sequencer.cardinality(), 1);
+        assertEq(sequencer.epoch().deadline, 1643324400);
         assertEq(sequencer.epoch().tokens, 1e18);
         assertEq(sequencer.epoch().shares, 0);
     }
 
     function testMintTwiceSameEpoch() public {
-        tTOKEMint(address(this), 1e18);
+        mint(address(this), 1e18);
         tokeVotePool.approve(address(sequencer), 1e18);
+        sequencer.push(170, 1643324400);
         sequencer.mint(address(this), 5e17);
         sequencer.mint(address(this), 5e17);
+
+        assertEq(tokeVotePool.balanceOf(address(reactor)), 1e18);
+        assertEq(tokeVotePool.balanceOf(address(sequencer)), 0);
+        assertEq(reactor.buffer(), 1e18);
+        assertEq(sequencer.balanceOf(address(this)), 1e18);
+        assertEq(sequencer.cardinality(), 1);
+        assertEq(sequencer.epoch().tokens, 1e18);
+        assertEq(sequencer.epoch().shares, 0);
     }
 
     function testMintPollEpoch() public {
@@ -85,15 +96,16 @@ contract SequencerTest is DSTest, Vm, Utilities {
         tokeVotePool.approve(address(sequencer), type(uint256).max);
 
         // epoch: 0
+        sequencer.push(170, uint32(block.timestamp) + 60 * 60 * 24);
         startPrank(address(user0));
-        tTOKEMint(address(user0), 1e18);
+        mint(address(user0), 1e18);
         sequencer.mint(address(user0), 1e18);
         stopPrank();
 
         // epoch: 1
-        rewardsHash.setCycleHashes(4, "b", "4");
+        sequencer.push(171, uint32(block.timestamp) + 60 * 60 * 24);
         startPrank(address(user1));
-        tTOKEMint(address(user1), 1e18);
+        mint(address(user1), 3e18);
         sequencer.mint(address(user1), 3e18);
         stopPrank();
 
@@ -112,10 +124,11 @@ contract SequencerTest is DSTest, Vm, Utilities {
     function testMintDifferentEpochRevert() public {
         tokeVotePool.approve(address(sequencer), 1e18);
 
-        tTOKEMint(address(this), 1e18);
+        mint(address(this), 1e18);
+        sequencer.push(170, 1643324400);
         sequencer.mint(address(this), 5e17);
 
-        rewardsHash.setCycleHashes(4, "b", "4");
+        sequencer.push(171, 1643324400);
         expectRevert(abi.encodeWithSignature("NonEmptyBalance()"));
         sequencer.mint(address(this), 5e17);
     }
@@ -125,37 +138,44 @@ contract SequencerTest is DSTest, Vm, Utilities {
      */
 
     function testFill() public {
+        mint(address(this), 1e18);
         tokeVotePool.approve(address(sequencer), 1e18);
-        tTOKEMint(address(this), 1e18);
+        sequencer.push(170, 1643324400);
         sequencer.mint(address(this), 1e18);
         sequencer.fill(0);
+
         assertEq(reactor.totalSupply(), 1e18);
         assertEq(reactor.balanceOf(address(sequencer)), 1e18);
         assertEq(reactor.balanceOf(address(this)), 0);
-        assertEq(sequencer.epoch().hash, keccak256(abi.encodePacked("a")));
-        assertEq(sequencer.epoch().cycle, 3);
+        assertEq(sequencer.epoch().deadline, 1643324400);
         assertEq(sequencer.epoch().tokens, 1e18);
         assertEq(sequencer.epoch().shares, 1e18);
         assert(sequencer.epoch().filled == true);
     }
 
     function testFillNonZeroIndexEpochAndReducingShares() public {
+        sequencer.push(170, 1643324400);
+
         startPrank(address(user0));
-        tokeVotePool.approve(address(sequencer), 1e18);
-        tTOKEMint(address(user0), 1e18);
-        sequencer.mint(address(user0), 1e18);
+        {
+            tokeVotePool.approve(address(sequencer), 1e18);
+            mint(address(user0), 1e18);
+            sequencer.mint(address(user0), 1e18);
+        }
         stopPrank();
 
-        rewardsHash.setCycleHashes(4, "b", "4");
+        sequencer.push(171, 1643324400);
 
         startPrank(address(user1));
-        tokeVotePool.approve(address(sequencer), 1e18);
-        tTOKEMint(address(user1), 1e18);
-        sequencer.mint(address(user1), 1e18);
+        {
+            tokeVotePool.approve(address(sequencer), 1e18);
+            mint(address(user1), 1e18);
+            sequencer.mint(address(user1), 1e18);
+        }
         stopPrank();
 
         sequencer.fill(0);
-        tTOKEMint(address(reactor), 1e18); // acts as a claim
+        mint(address(reactor), 1e18); // acts as a claim
         sequencer.fill(1);
 
         assertEq(sequencer.epochAt(0).tokens, 1e18);
@@ -165,17 +185,19 @@ contract SequencerTest is DSTest, Vm, Utilities {
     }
 
     function testFillDiscontinuousEpochFillRevert() public {
+        sequencer.push(170, 1643324400);
+
         startPrank(address(user0));
         tokeVotePool.approve(address(sequencer), 1e18);
-        tTOKEMint(address(user0), 1e18);
+        mint(address(user0), 1e18);
         sequencer.mint(address(user0), 1e18);
         stopPrank();
 
-        rewardsHash.setCycleHashes(4, "b", "4");
+        sequencer.push(171, 1643324400);
 
         startPrank(address(user1));
         tokeVotePool.approve(address(sequencer), 1e18);
-        tTOKEMint(address(user1), 1e18);
+        mint(address(user1), 1e18);
         sequencer.mint(address(user1), 1e18);
         stopPrank();
 
@@ -189,7 +211,8 @@ contract SequencerTest is DSTest, Vm, Utilities {
 
     function testJoin() public {
         tokeVotePool.approve(address(sequencer), 1e18);
-        tTOKEMint(address(this), 1e18);
+        mint(address(this), 1e18);
+        sequencer.push(170, 1643324400);
         sequencer.mint(address(this), 1e18);
         sequencer.fill(0);
 
@@ -199,9 +222,11 @@ contract SequencerTest is DSTest, Vm, Utilities {
     }
 
     function testJoinWithTwoUsers() public {
+        sequencer.push(170, 1643324400);
+
         startPrank(address(user0));
         tokeVotePool.approve(address(sequencer), 1e18);
-        tTOKEMint(address(user0), 1e18);
+        mint(address(user0), 1e18);
         sequencer.mint(address(user0), 1e18);
         stopPrank();
 
@@ -212,18 +237,18 @@ contract SequencerTest is DSTest, Vm, Utilities {
         assertEq(sequencer.balanceOf(address(user0)), 0);
         assertEq(reactor.balanceOf(address(user0)), 1e18);
 
-        tTOKEMint(address(reactor), 6e18);
-        rewardsHash.setCycleHashes(4, "b", "4");
+        mint(address(reactor), 6e18);
+        sequencer.push(171, 1643324400);
 
         startPrank(address(user1));
         tokeVotePool.approve(address(sequencer), 3e18);
-        tTOKEMint(address(user1), 3e18);
+        mint(address(user1), 3e18);
         sequencer.mint(address(user1), 3e18);
         stopPrank();
 
         startPrank(address(user2));
         tokeVotePool.approve(address(sequencer), 2e18);
-        tTOKEMint(address(user2), 2e18);
+        mint(address(user2), 2e18);
         sequencer.mint(address(user2), 2e18);
         stopPrank();
 
@@ -241,9 +266,11 @@ contract SequencerTest is DSTest, Vm, Utilities {
     }
 
     function testJoinWithTwoUsersRoundNumber() public {
+        sequencer.push(170, 1643324400);
+
         startPrank(address(user0));
         tokeVotePool.approve(address(sequencer), 1e18);
-        tTOKEMint(address(user0), 1e18);
+        mint(address(user0), 1e18);
         sequencer.mint(address(user0), 1e18);
         stopPrank();
 
@@ -254,18 +281,18 @@ contract SequencerTest is DSTest, Vm, Utilities {
         assertEq(sequencer.balanceOf(address(user0)), 0);
         assertEq(reactor.balanceOf(address(user0)), 1e18);
 
-        tTOKEMint(address(reactor), 1e18);
-        rewardsHash.setCycleHashes(4, "b", "4");
+        mint(address(reactor), 1e18);
+        sequencer.push(171, 1643324400);
 
         startPrank(address(user1));
         tokeVotePool.approve(address(sequencer), 3e18);
-        tTOKEMint(address(user1), 3e18);
+        mint(address(user1), 3e18);
         sequencer.mint(address(user1), 3e18);
         stopPrank();
 
         startPrank(address(user2));
         tokeVotePool.approve(address(sequencer), 2e18);
-        tTOKEMint(address(user2), 2e18);
+        mint(address(user2), 2e18);
         sequencer.mint(address(user2), 2e18);
         stopPrank();
 

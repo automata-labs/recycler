@@ -17,6 +17,11 @@ library Cast {
         y = uint112(x);
     }
 
+    function u104(uint256 x) internal pure returns (uint104 y) {
+        require (x <= type(uint104).max, "Cast");
+        y = uint104(x);
+    }
+
     function u32(uint256 x) internal pure returns (uint32 y) {
         require (x <= type(uint32).max, "Cast");
         y = uint32(x);

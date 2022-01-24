@@ -6,8 +6,6 @@ import "./libraries/Cast.sol";
 import "./libraries/ERC20Restricted.sol";
 import "./libraries/Pause.sol";
 import "./libraries/SafeTransfer.sol";
-import "./interfaces/external/IRewards.sol";
-import "./interfaces/external/IRewardsHash.sol";
 import "./interfaces/external/ITokeVotePool.sol";
 import "./interfaces/ICallback.sol";
 import "./interfaces/IReactor.sol";
@@ -19,6 +17,7 @@ contract Sequencer is ERC20Restricted, Auth, Pause {
 
     event Joined(address indexed sender);
     event Filled(address indexed sender, uint256 idx);
+    event EpochCreated(uint256 indexed index, uint256 indexed cycle, uint32 deadline);
 
     error BadEpoch();
     error Dust();
@@ -43,14 +42,12 @@ contract Sequencer is ERC20Restricted, Auth, Pause {
     }
 
     struct Epoch {
-        /// @dev Hash of the `latestClaimable` IPFS hash.
-        bytes32 hash;
-        /// @dev The cycle which this epoch was created at.
-        uint24 cycle;
+        /// @dev The timestamp in which this epoch becomes outdated.
+        uint32 deadline;
         /// @dev The total amount of tokens deposited during this epoch (batch of cycles).
-        uint112 tokens;
+        uint104 tokens;
         /// @dev The total shares redeemable by the depositors during this cycle.
-        uint112 shares;
+        uint104 shares;
         /// @dev If the epoch has been filled with shares.
         bool filled;
     }
@@ -66,10 +63,6 @@ contract Sequencer is ERC20Restricted, Auth, Pause {
     address public immutable underlying;
     /// @notice The derivative token.
     address public immutable derivative;
-    /// @notice The Tokemak rewards contract.
-    address public immutable rewards;
-    /// @notice The Tokemak cycle hash contract.
-    address public immutable rewardsHash;
 
     /// @notice The minimum amount of tokens that needs to be queued.
     /// @dev This is to avoid the shares amount from reverting when filling.
@@ -81,8 +74,6 @@ contract Sequencer is ERC20Restricted, Auth, Pause {
         address reactor_,
         address underlying_,
         address derivative_,
-        address rewards_,
-        address rewardsHash_,
         uint256 dust_
     ) ERC20Restricted(
         string(abi.encodePacked("Sequencing ", IERC20Metadata(reactor_).name())),
@@ -92,8 +83,6 @@ contract Sequencer is ERC20Restricted, Auth, Pause {
         reactor = reactor_;
         underlying = underlying_;
         derivative = derivative_;
-        rewards = rewards_;
-        rewardsHash = rewardsHash_;
         dust = dust_;
     }
 
@@ -122,13 +111,6 @@ contract Sequencer is ERC20Restricted, Auth, Pause {
             revert Undefined();
     }
 
-    function cursor() public view returns (bytes32) {
-        if (epochs.length > 0)
-            return epochs[epochs.length - 1].hash;
-        else
-            return bytes32(0);
-    }
-
     function epoch() external view returns (Epoch memory) {
         return epochs[epochs.length - 1];
     }
@@ -141,21 +123,27 @@ contract Sequencer is ERC20Restricted, Auth, Pause {
      * Core
      */
 
+    function push(uint256 currentCycle, uint32 deadline)
+        external
+        auth
+    {
+        epochs.push(Epoch({ deadline: deadline, tokens: 0, shares: 0, filled: false }));
+        emit EpochCreated(epochs.length - 1, currentCycle, deadline);
+    }
+
     function mint(address to, uint256 amount)
         external
         noauth
         playback
     {
-        _poll();
-
         if (amount == 0)
             revert Zero();
 
-        if (amount < dust)
-            revert Dust();
-
-        if (epochs[index()].filled)
+        if (epochs[index()].deadline < _blockTimestamp())
             revert BadEpoch();
+
+        if (balances[to].amount + amount < dust)
+            revert Dust();
 
         if (!(balances[to].idx == index() || balances[to].amount == 0))
             revert NonEmptyBalance();
@@ -168,7 +156,7 @@ contract Sequencer is ERC20Restricted, Auth, Pause {
         })));
 
         supply += amount;
-        epochs[index()].tokens += amount.u112();
+        epochs[index()].tokens += amount.u104();
         balances[to].idx = (index()).u32();
         balances[to].amount += amount.u128();
 
@@ -195,8 +183,8 @@ contract Sequencer is ERC20Restricted, Auth, Pause {
             shares = amount * epochs[idx].shares / epochs[idx].tokens;
 
         supply -= amount;
-        epochs[idx].tokens -= amount.u112();
-        epochs[idx].shares -= shares.u112();
+        epochs[idx].tokens -= amount.u104();
+        epochs[idx].shares -= shares.u104();
         balances[msg.sender].amount -= amount.u224();
         IReactor(reactor).unload(to, amount);
 
@@ -212,7 +200,7 @@ contract Sequencer is ERC20Restricted, Auth, Pause {
             revert BadEpoch();
         
         uint256 shares = IReactor(reactor).mint(address(this), epochs[idx].tokens);
-        epochs[idx].shares = shares.u112();
+        epochs[idx].shares = shares.u104();
         epochs[idx].filled = true;
 
         emit Filled(msg.sender, idx);
@@ -256,22 +244,7 @@ contract Sequencer is ERC20Restricted, Auth, Pause {
         decoded.token.safeTransferFrom(decoded.payer, decoded.payee, decoded.amount);
     }
 
-    /**
-     * Internal
-     */
-
-    /// @dev Should push a new epoch if the observed `latestClaimable` has changed.
-    function _poll() internal {
-        uint24 cycle = IRewardsHash(rewardsHash).latestCycleIndex().u24();
-        (string memory latestClaimable, ) = IRewardsHash(rewardsHash).cycleHashes(cycle);
-
-        if (bytes(latestClaimable).length == 0)
-            revert PollEmpty();
-
-        bytes32 hash = keccak256(abi.encodePacked(latestClaimable));
-
-        if (cursor() != hash) {
-            epochs.push(Epoch({ hash: hash, cycle: cycle, tokens: 0, shares: 0, filled: false }));
-        }
+    function _blockTimestamp() internal view returns (uint32) {
+        return uint32(block.timestamp);
     }
 }
