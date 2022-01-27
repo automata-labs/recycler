@@ -86,14 +86,22 @@ contract RecyclerTest is DSTest, Vm, Utilities {
 
         // mint as a user
         user0.mint(1e18);
-        assertEq(recycler.balanceOf(address(user0)), 1e18);
+        // balance still zero bc epoch not filled
+        assertEq(recycler.balanceOf(address(user0)), 0);
 
         // mint as this
         mint(address(this), 3e18);
         tokeVotePool.approve(address(manager), type(uint256).max);
         // mint only 2 of 3
         manager.mint(address(this), 2e18);
+        // 1 remaining
         assertEq(tokeVotePool.balanceOf(address(this)), 1e18);
+        // balance still zero bc epoch not filled
+        assertEq(recycler.balanceOf(address(this)), 0);
+
+        // fill should make balance show up
+        recycler.fill(1);
+        assertEq(recycler.balanceOf(address(user0)), 1e18);
         assertEq(recycler.balanceOf(address(this)), 2e18);
     }
 
@@ -106,9 +114,8 @@ contract RecyclerTest is DSTest, Vm, Utilities {
 
         assertEq(recycler.balanceOf(address(user0)), 1e18);
         assertEq(recycler.sharesOf(address(user0)), 0);
-        assertEq(recycler.bufferOf(address(user0)).epoch, 1);
-        assertEq(recycler.bufferOf(address(user0)).amount, 1e18);
-        assertEq(recycler.coinsOf(address(user0)), 1e18);
+        assertEq(recycler.bufferAs(address(user0)).epoch, 1);
+        assertEq(recycler.bufferAs(address(user0)).amount, 1e18);
 
         // simulate compounding on the recycler...
         mint(address(recycler), 1e18);
@@ -126,23 +133,24 @@ contract RecyclerTest is DSTest, Vm, Utilities {
         // mint again with user to see that it ticks
         user0.mint(1e18);
 
-        assertEq(recycler.balanceOf(address(user0)), 3e18);
+        assertEq(recycler.balanceOf(address(user0)), 2e18);
         assertEq(recycler.sharesOf(address(user0)), 1e18);
         // the buffer does not get cleared, instead becomes for the epoch deposited
-        assertEq(recycler.bufferOf(address(user0)).epoch, 2);
-        assertEq(recycler.bufferOf(address(user0)).amount, 1e18);
-        assertEq(recycler.coinsOf(address(user0)), 2e18);
+        assertEq(recycler.bufferAs(address(user0)).epoch, 2);
+        assertEq(recycler.bufferAs(address(user0)).amount, 1e18);
 
         recycler.fill(2);
         recycler.next(uint32(block.timestamp + 1));
         user0.mint(1);
 
-        assertEq(recycler.balanceOf(address(user0)), 3e18 + 1);
+        assertEq(recycler.balanceOf(address(user0)), 3e18);
         assertEq(recycler.sharesOf(address(user0)), 1e18 + 5e17);
         // the buffer does not get cleared, instead becomes for the epoch deposited
-        assertEq(recycler.bufferOf(address(user0)).epoch, 3);
-        assertEq(recycler.bufferOf(address(user0)).amount, 1);
-        assertEq(recycler.coinsOf(address(user0)), 3e18);
+        assertEq(recycler.bufferAs(address(user0)).epoch, 3);
+        assertEq(recycler.bufferAs(address(user0)).amount, 1);
+
+        recycler.fill(3);
+        assertEq(recycler.balanceOf(address(user0)), 3e18 + 1);
     }
 
     function testMintInsufficientTransferError() public {
@@ -164,8 +172,8 @@ contract RecyclerTest is DSTest, Vm, Utilities {
     function testBurn() public {
         setUpBurn();
 
-        uint256 coins = recycler.coinsOf(address(this));
-        recycler.burn(address(this), address(this), coins);
+        uint256 balance = recycler.balanceOf(address(this));
+        recycler.burn(address(this), address(this), balance);
     }
 
     /**
@@ -180,11 +188,10 @@ contract RecyclerTest is DSTest, Vm, Utilities {
 
         assertEq(recycler.totalSupply(), 1e18);
         assertEq(recycler.totalShares(), 0);
-        assertEq(recycler.balanceOf(address(this)), 1e18);
+        assertEq(recycler.balanceOf(address(this)), 0);
         assertEq(recycler.sharesOf(address(this)), 0);
-        assertEq(recycler.bufferOf(address(this)).epoch, 1);
-        assertEq(recycler.bufferOf(address(this)).amount, 1e18);
-        assertEq(recycler.coinsOf(address(this)), 0);
+        assertEq(recycler.bufferAs(address(this)).epoch, 1);
+        assertEq(recycler.bufferAs(address(this)).amount, 1e18);
         assertEq(recycler.epochOf(1).deadline, uint32(block.timestamp + 1));
         assertEq(recycler.epochOf(1).amount, 1e18);
         assertEq(recycler.epochOf(1).shares, 0);
@@ -194,11 +201,10 @@ contract RecyclerTest is DSTest, Vm, Utilities {
 
         assertEq(recycler.totalSupply(), 1e18);
         assertEq(recycler.totalShares(), 1e18); // +
-        assertEq(recycler.balanceOf(address(this)), 1e18);
+        assertEq(recycler.balanceOf(address(this)), 1e18); // + balance should be defined now bc filled
         assertEq(recycler.sharesOf(address(this)), 0); // + shares zero bc not tick:ed
-        assertEq(recycler.bufferOf(address(this)).epoch, 1);
-        assertEq(recycler.bufferOf(address(this)).amount, 1e18);
-        assertEq(recycler.coinsOf(address(this)), 1e18); // + coins should be defined now bc filled
+        assertEq(recycler.bufferAs(address(this)).epoch, 1);
+        assertEq(recycler.bufferAs(address(this)).amount, 1e18);
         assertEq(recycler.epochOf(1).deadline, uint32(block.timestamp + 1));
         assertEq(recycler.epochOf(1).amount, 1e18);
         assertEq(recycler.epochOf(1).shares, 1e18); // +
@@ -218,8 +224,8 @@ contract RecyclerTest is DSTest, Vm, Utilities {
         recycler.tick(address(user0));
 
         assertEq(recycler.sharesOf(address(user0)), 1e18);
-        assertEq(recycler.bufferOf(address(user0)).epoch, 0);
-        assertEq(recycler.bufferOf(address(user0)).amount, 0);
+        assertEq(recycler.bufferAs(address(user0)).epoch, 0);
+        assertEq(recycler.bufferAs(address(user0)).amount, 0);
     }
 
     function testTickOnEmptyBuffer() public {
@@ -239,9 +245,9 @@ contract RecyclerTest is DSTest, Vm, Utilities {
         user1.mint(3e18);
         user2.mint(6e18);
 
-        assertEq(recycler.bufferOf(address(user0)).amount, 1e18);
-        assertEq(recycler.bufferOf(address(user1)).amount, 3e18);
-        assertEq(recycler.bufferOf(address(user2)).amount, 6e18);
+        assertEq(recycler.bufferAs(address(user0)).amount, 1e18);
+        assertEq(recycler.bufferAs(address(user1)).amount, 3e18);
+        assertEq(recycler.bufferAs(address(user2)).amount, 6e18);
 
         warp(block.timestamp + 2);
         // block should revert bc deadline passed
@@ -250,15 +256,15 @@ contract RecyclerTest is DSTest, Vm, Utilities {
         manager.mint(address(this), 1e18);
 
         // no active coins, because not filled yet
-        assertEq(recycler.coinsOf(address(user0)), 0);
-        assertEq(recycler.coinsOf(address(user1)), 0);
-        assertEq(recycler.coinsOf(address(user2)), 0);
+        assertEq(recycler.balanceOf(address(user0)), 0);
+        assertEq(recycler.balanceOf(address(user1)), 0);
+        assertEq(recycler.balanceOf(address(user2)), 0);
         // fill
         recycler.fill(1);
         // simulate compounding by minting
         mint(address(recycler), 10e18);
         
-        /// balance should double
+        /// balance should double bc the epoch has been filled
         assertEq(recycler.balanceOf(address(user0)), 2e18);
         assertEq(recycler.balanceOf(address(user1)), 6e18);
         assertEq(recycler.balanceOf(address(user2)), 12e18);
@@ -267,16 +273,12 @@ contract RecyclerTest is DSTest, Vm, Utilities {
         assertEq(recycler.sharesOf(address(user1)), 0);
         assertEq(recycler.sharesOf(address(user2)), 0);
         // buffer should be the same
-        assertEq(recycler.bufferOf(address(user0)).epoch, 1);
-        assertEq(recycler.bufferOf(address(user1)).epoch, 1);
-        assertEq(recycler.bufferOf(address(user2)).epoch, 1);
-        assertEq(recycler.bufferOf(address(user0)).amount, 1e18);
-        assertEq(recycler.bufferOf(address(user1)).amount, 3e18);
-        assertEq(recycler.bufferOf(address(user2)).amount, 6e18);
-        // coins should be same as balance, bc epoch has been filled and thus coins are active
-        assertEq(recycler.coinsOf(address(user0)), 2e18);
-        assertEq(recycler.coinsOf(address(user1)), 6e18);
-        assertEq(recycler.coinsOf(address(user2)), 12e18);
+        assertEq(recycler.bufferAs(address(user0)).epoch, 1);
+        assertEq(recycler.bufferAs(address(user1)).epoch, 1);
+        assertEq(recycler.bufferAs(address(user2)).epoch, 1);
+        assertEq(recycler.bufferAs(address(user0)).amount, 1e18);
+        assertEq(recycler.bufferAs(address(user1)).amount, 3e18);
+        assertEq(recycler.bufferAs(address(user2)).amount, 6e18);
 
         recycler.tick(address(user0));
         recycler.tick(address(user1));
@@ -291,43 +293,36 @@ contract RecyclerTest is DSTest, Vm, Utilities {
         assertEq(recycler.sharesOf(address(user1)), 3e18);
         assertEq(recycler.sharesOf(address(user2)), 6e18);
         // should be zero
-        assertEq(recycler.bufferOf(address(user0)).epoch, 0);
-        assertEq(recycler.bufferOf(address(user1)).epoch, 0);
-        assertEq(recycler.bufferOf(address(user2)).epoch, 0);
-        assertEq(recycler.bufferOf(address(user0)).amount, 0);
-        assertEq(recycler.bufferOf(address(user1)).amount, 0);
-        assertEq(recycler.bufferOf(address(user2)).amount, 0);
-        // should be same
-        assertEq(recycler.coinsOf(address(user0)), 2e18);
-        assertEq(recycler.coinsOf(address(user1)), 6e18);
-        assertEq(recycler.coinsOf(address(user2)), 12e18);
+        assertEq(recycler.bufferAs(address(user0)).epoch, 0);
+        assertEq(recycler.bufferAs(address(user1)).epoch, 0);
+        assertEq(recycler.bufferAs(address(user2)).epoch, 0);
+        assertEq(recycler.bufferAs(address(user0)).amount, 0);
+        assertEq(recycler.bufferAs(address(user1)).amount, 0);
+        assertEq(recycler.bufferAs(address(user2)).amount, 0);
 
         // go to next epoch: 2
         recycler.next(uint32(block.timestamp + 1));
         user0.mint(1e18);
-        assertEq(recycler.balanceOf(address(user0)), 3e18);
+        assertEq(recycler.balanceOf(address(user0)), 2e18);
         assertEq(recycler.sharesOf(address(user0)), 1e18);
-        assertEq(recycler.bufferOf(address(user0)).epoch, 2);
-        assertEq(recycler.bufferOf(address(user0)).amount, 1e18);
-        assertEq(recycler.coinsOf(address(user0)), 2e18);
+        assertEq(recycler.bufferAs(address(user0)).epoch, 2);
+        assertEq(recycler.bufferAs(address(user0)).amount, 1e18);
 
         // fill epoch: 2 and now we should have shares for user0
         recycler.fill(2);
 
         assertEq(recycler.balanceOf(address(user0)), 3e18);
         assertEq(recycler.sharesOf(address(user0)), 1e18);
-        assertEq(recycler.bufferOf(address(user0)).epoch, 2);
-        assertEq(recycler.bufferOf(address(user0)).amount, 1e18);
-        assertEq(recycler.coinsOf(address(user0)), 3e18);
+        assertEq(recycler.bufferAs(address(user0)).epoch, 2);
+        assertEq(recycler.bufferAs(address(user0)).amount, 1e18);
 
         // tick should reset buffer
         recycler.tick(address(user0));
 
         assertEq(recycler.balanceOf(address(user0)), 3e18);
         assertEq(recycler.sharesOf(address(user0)), 1e18 + 5e17);
-        assertEq(recycler.bufferOf(address(user0)).epoch, 0);
-        assertEq(recycler.bufferOf(address(user0)).amount, 0);
-        assertEq(recycler.coinsOf(address(user0)), 3e18);
+        assertEq(recycler.bufferAs(address(user0)).epoch, 0);
+        assertEq(recycler.bufferAs(address(user0)).amount, 0);
     }
 }
 

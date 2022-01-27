@@ -20,12 +20,12 @@ import "./interfaces/ICallback.sol";
 //     if (buffer == 0)
 //         revert ParameterZero();
 
-//     epochs[_bufferOf[msg.sender].epoch].amount -= buffer.u104();
+//     epochs[bufferOf[msg.sender].epoch].amount -= buffer.u104();
 //     totalBuffer -= buffer;
-//     _bufferOf[msg.sender].amount -= buffer.u224();
+//     bufferOf[msg.sender].amount -= buffer.u224();
 
-//     if (_bufferOf[msg.sender].amount == 0)
-//         delete _bufferOf[msg.sender];
+//     if (bufferOf[msg.sender].amount == 0)
+//         delete bufferOf[msg.sender];
 
 //     coin.safeTransfer(to, buffer);
 
@@ -74,7 +74,7 @@ contract Recycler is Auth {
     /// @notice The mapping for keeping track of shares that each account has.
     mapping(address => uint256) public sharesOf;
     /// @notice The mapping for keeping track of buffered tokens.
-    mapping(address => Buffer.Data) public _bufferOf;
+    mapping(address => Buffer.Data) public bufferOf;
     /// @notice The mapping for allowance.
     mapping(address => mapping(address => uint256)) public allowance;
     /// @notice The mapping for nonces.
@@ -121,20 +121,10 @@ contract Recycler is Auth {
         return IERC20(coin).balanceOf(address(this));
     }
 
-    /// @notice Returns both the buffered- and active coins.
+    /// @notice Returns only the number of active coins (i.e. coins not being buffered).
     function balanceOf(address account) external view returns (uint256) {
-        if (_bufferOf[account].isEmpty()) {
-            return sharesOf[account].toCoins(totalCoins(), totalShares);
-        } else {
-            if (epochs[_bufferOf[account].epoch].filled) {
-                return coinsOf(account);
-            } else {
-                return (
-                    _bufferOf[account].amount +
-                    sharesOf[account].toCoins(totalCoins(), totalShares)
-                );
-            }
-        }
+        uint256 shares = bufferOf[account].toShares(epochs) + sharesOf[account];
+        return shares.toCoins(totalCoins(), totalShares);
     }
 
     /**
@@ -146,17 +136,9 @@ contract Recycler is Auth {
         return IERC20(coin).balanceOf(address(this)) - totalBuffer;
     }
 
-    /// @notice Returns the buffer struct for an account.
-    function bufferOf(address account) external view returns (Buffer.Data memory) {
-        return _bufferOf[account];
-    }
-
-    /// @notice Returns only the number of active coins (i.e. not being buffered).
-    /// @dev It will read the coins from the buffer and they're included iff its epoch has been filled.
-    ///     The active coins are derived from shares (in the buffer and in the shares mapping).
-    function coinsOf(address account) public view returns (uint256) {
-        uint256 shares = _bufferOf[account].toShares(epochs) + sharesOf[account];
-        return shares.toCoins(totalCoins(), totalShares);
+    /// @notice Returns the buffer of `account` as a struct.
+    function bufferAs(address account) external view returns (Buffer.Data memory) {
+        return bufferOf[account];
     }
 
     /// @notice Returns the epoch at `index` as a struct.
@@ -183,7 +165,7 @@ contract Recycler is Auth {
         noauth
         returns (uint256 shares)
     {
-        Buffer.Data memory buffer = _bufferOf[account];
+        Buffer.Data memory buffer = bufferOf[account];
 
         if (buffer.epoch > 0 && epochs[buffer.epoch].filled) {
             shares = buffer.toShares(epochs);
@@ -192,7 +174,7 @@ contract Recycler is Auth {
                 shares = buffer.amount;
 
             sharesOf[account] += shares;
-            delete _bufferOf[account];
+            delete bufferOf[account];
         }
     }
 
@@ -210,7 +192,7 @@ contract Recycler is Auth {
         if (epochs[cursor].filled || epochs[cursor].deadline < _blockTimestamp())
             revert EpochExpired();
 
-        if (_bufferOf[to].amount > 0 && _bufferOf[to].epoch != cursor)
+        if (bufferOf[to].amount > 0 && bufferOf[to].epoch != cursor)
             revert BufferExists();
 
         // pull coins
@@ -221,8 +203,8 @@ contract Recycler is Auth {
         // update state
         epochs[cursor].amount += buffer.u104();
         totalBuffer += buffer;
-        _bufferOf[to].epoch = cursor.u32();
-        _bufferOf[to].amount = buffer.u224();
+        bufferOf[to].epoch = cursor.u32();
+        bufferOf[to].amount = buffer.u224();
 
         emit Transfer(address(0), to, buffer);
     }
