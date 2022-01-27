@@ -221,7 +221,7 @@ contract RecyclerTest is DSTest, Vm, Utilities {
 
         // fill and tick, and then check holdings
         recycler.fill(1);
-        recycler.tick(address(user0));
+        recycler.poke(address(user0));
 
         assertEq(recycler.sharesOf(address(user0)), 1e18);
         assertEq(recycler.bufferAs(address(user0)).epoch, 0);
@@ -280,9 +280,9 @@ contract RecyclerTest is DSTest, Vm, Utilities {
         assertEq(recycler.bufferAs(address(user1)).amount, 3e18);
         assertEq(recycler.bufferAs(address(user2)).amount, 6e18);
 
-        recycler.tick(address(user0));
-        recycler.tick(address(user1));
-        recycler.tick(address(user2));
+        recycler.poke(address(user0));
+        recycler.poke(address(user1));
+        recycler.poke(address(user2));
 
         /// should be the same
         assertEq(recycler.balanceOf(address(user0)), 2e18);
@@ -317,7 +317,7 @@ contract RecyclerTest is DSTest, Vm, Utilities {
         assertEq(recycler.bufferAs(address(user0)).amount, 1e18);
 
         // tick should reset buffer
-        recycler.tick(address(user0));
+        recycler.poke(address(user0));
 
         assertEq(recycler.balanceOf(address(user0)), 3e18);
         assertEq(recycler.sharesOf(address(user0)), 1e18 + 5e17);

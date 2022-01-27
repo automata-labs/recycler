@@ -13,33 +13,6 @@ import "./libraries/Revert.sol";
 import "./libraries/SafeTransfer.sol";
 import "./interfaces/ICallback.sol";
 
-// not increasing supply as shares are distributed pro rata after a full-cycle
-// function exit(address to, uint256 buffer) external returns (bool) {
-//     tick(msg.sender);
-
-//     if (buffer == 0)
-//         revert ParameterZero();
-
-//     epochs[bufferOf[msg.sender].epoch].amount -= buffer.u104();
-//     totalBuffer -= buffer;
-//     bufferOf[msg.sender].amount -= buffer.u224();
-
-//     if (bufferOf[msg.sender].amount == 0)
-//         delete bufferOf[msg.sender];
-
-//     coin.safeTransfer(to, buffer);
-
-//     return true;
-// }
-/**
- * ERC-20 actions
- */
-
-// function transfer(address to, uint256 amount) external returns (bool) {
-//     tick(msg.sender);
-//     return true;
-// }
-
 contract Recycler is Auth {
     using Buffer for Buffer.Data;
     using Cast for uint256;
@@ -48,18 +21,25 @@ contract Recycler is Auth {
     using SafeTransfer for address;
     using Share for uint256;
 
+    /// @notice Throws when trying to mint when a buffer still exists and cannot be ticked/poked.
     error BufferExists();
+    /// @notice Throws when permit deadline has expired.
+    error DeadlineExpired();
+    /// @notice Throws when trying to fill an epoch with a prev-sibling that's not filled.
     error Discontinuity();
+    /// @notice Throws when minting on an latest epoch that's dead or filled.
     error EpochExpired();
-    /// @notice Reverts there's an insufficient amount from a transfer pull request.
+    /// @notice Throws there's an insufficient amount from a transfer pull request.
     error InsufficientTransfer();
     /// @notice Throws when conversion to shares gives zero.
     error InsufficientExchange();
     /// @notice Throws when the epoch parameters is invalid (0).
     error InvalidEpoch();
-    /// @notice Reverts when an amount parameter is less than dust.
+    /// @notice Throws when the permit signature is invalid.
+    error InvalidSignature();
+    /// @notice Throws when an amount parameter is less than dust.
     error ParameterDust();
-    /// @notice Reverts when an amount parameter is zero.
+    /// @notice Throws when an amount parameter is zero.
     error ParameterZero();
 
     /// @dev Emitted when coins are moved from one address to another.
@@ -89,18 +69,45 @@ contract Recycler is Auth {
     /// @notice The epochs to batch together deposits and share issuances.
     mapping(uint256 => Epoch.Data) public epochs;
 
+    /// @notice The permit typehash used for `permit`.
+    bytes32 public constant PERMIT_TYPEHASH = keccak256("Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)");
+    /// @notice The initial chain id set at deployment.
+    uint256 private immutable INITIAL_CHAIN_ID;
+    /// @notice The initial domain separator set at deployment.
+    bytes32 private immutable INITIAL_DOMAIN_SEPARATOR;
+
+    /// @notice Converts buffer into shares if the buffer's epoch has been filled - otherwise the
+    ///     function does nothing.
+    modifier tick(address account) {
+        _tick(account);
+        _;
+    }
+
     constructor(address coin_, uint256 dust_) {
         coin = coin_;
         dust = dust_;
 
         epochs[0].filled = true;
+
+        INITIAL_CHAIN_ID = block.chainid;
+        INITIAL_DOMAIN_SEPARATOR = computerDomainSeparator();
+    }
+
+    /**
+     * EIP-2612
+     */
+
+    function DOMAIN_SEPARATOR() public view returns (bytes32) {
+        return block.chainid == INITIAL_CHAIN_ID
+            ? INITIAL_DOMAIN_SEPARATOR
+            : computerDomainSeparator();
     }
 
     /**
      * ERC-20 derived
      */
 
-    function name() external pure returns (string memory) {
+    function name() public pure returns (string memory) {
         return "(Re)cycle Staked Tokemak";
     }
 
@@ -147,6 +154,75 @@ contract Recycler is Auth {
     }
 
     /**
+    * ERC-20 actions
+    */
+
+    function transfer(address to, uint256 coins)
+        external
+        noauth
+        tick(msg.sender)
+        returns (bool)
+    {
+        _transfer(msg.sender, to, coins);
+
+        return true;
+    }
+
+    function transferFrom(address from, address to, uint256 coins)
+        external
+        noauth
+        tick(from)
+        returns (bool)
+    {
+        _decreaseAllowance(from, coins);
+        _transfer(msg.sender, to, coins);
+
+        return true;
+    }
+
+    function approve(address spender, uint256 coins) external returns (bool) {
+        _approve(msg.sender, spender, coins);
+
+        return true;
+    }
+
+    function permit(
+        address owner,
+        address spender,
+        uint256 coins,
+        uint256 deadline,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    ) external virtual {
+        if (deadline < block.timestamp)
+            revert DeadlineExpired();
+
+        bytes32 hash = keccak256(
+            abi.encodePacked(
+                "\x19\x01",
+                DOMAIN_SEPARATOR(),
+                keccak256(
+                    abi.encode(
+                        keccak256("Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)"),
+                        owner,
+                        spender,
+                        coins,
+                        nonces[owner]++,
+                        deadline
+                    )
+                )
+            )
+        );
+        address signer = ecrecover(hash, v, r, s);
+
+        if (signer == address(0) || signer != owner)
+            revert InvalidSignature();
+
+        _approve(owner, spender, coins);
+    }
+
+    /**
      * Core actions
      */
 
@@ -158,24 +234,12 @@ contract Recycler is Auth {
         epochs[(id = ++cursor)].deadline = deadline;
     }
 
-    /// @notice Converts buffer into shares if the buffer's epoch has been filled - otherwise the
-    ///     function does nothing.
-    function tick(address account)
-        public
+    function poke(address account)
+        external
         noauth
-        returns (uint256 shares)
+        returns (uint256)
     {
-        Buffer.Data memory buffer = bufferOf[account];
-
-        if (buffer.epoch > 0 && epochs[buffer.epoch].filled) {
-            shares = buffer.toShares(epochs);
-
-            if (shares == 0)
-                shares = buffer.amount;
-
-            sharesOf[account] += shares;
-            delete bufferOf[account];
-        }
+        return _tick(account);
     }
 
     /// @notice Deposit buffered coins at a the cursor's epoch.
@@ -183,11 +247,10 @@ contract Recycler is Auth {
     function mint(address to, uint256 buffer, bytes memory data)
         external
         noauth
+        tick(to)
     {
         if (buffer == 0 || buffer < dust)
             revert ParameterDust();
-
-        tick(to);
 
         if (epochs[cursor].filled || epochs[cursor].deadline < _blockTimestamp())
             revert EpochExpired();
@@ -212,12 +275,12 @@ contract Recycler is Auth {
     function burn(address from, address to, uint256 coins)
         external
         noauth
+        tick(from)
         returns (uint256 shares)
     {
         if (coins == 0)
             revert ParameterDust();
 
-        tick(from);
         _decreaseAllowance(from, coins);
         shares = coins.toShares(totalShares, totalCoins());
 
@@ -229,6 +292,27 @@ contract Recycler is Auth {
         coin.safeTransfer(to, coins);
 
         emit Transfer(from, address(0), coins);
+    }
+
+    function exit(address from, address to, uint256 buffer)
+        external
+        noauth
+        tick(from)
+    {
+        if (buffer == 0)
+            revert ParameterZero();
+
+        _decreaseAllowance(from, buffer);
+        epochs[bufferOf[from].epoch].amount -= buffer.u104();
+        totalBuffer -= buffer;
+        bufferOf[to].amount -= buffer.u224();
+
+        if (bufferOf[from].amount == 0)
+            delete bufferOf[from];
+
+        coin.safeTransfer(to, buffer);
+
+        emit Transfer(from, address(0), buffer);
     }
 
     function fill(uint256 epoch)
@@ -273,8 +357,60 @@ contract Recycler is Auth {
     }
 
     /**
+     * ERC-20 internal
+     */
+    
+    function computerDomainSeparator() internal virtual view returns (bytes32) {
+        return keccak256(
+            abi.encode(
+                keccak256("EIP712Domain(string name,string version,uint256 chainid,address verifyingContract)"),
+                keccak256(bytes(name())),
+                keccak256(bytes(version())),
+                block.chainid,
+                address(this)
+            )
+        );
+    }
+
+    function _transfer(address from, address to, uint256 coins) internal {
+        uint256 shares = coins.toShares(totalShares, totalCoins());
+        sharesOf[from] -= shares;
+        sharesOf[to] += shares;
+        emit Transfer(msg.sender, to, coins);
+    }
+
+    function _decreaseAllowance(address from, uint256 coins) internal {
+        if (from != msg.sender) {
+            uint256 allowed = allowance[from][msg.sender];
+
+            if (allowed != type(uint256).max) {
+                _approve(from, msg.sender, allowed - coins);
+            }
+        }
+    }
+
+    function _approve(address owner, address spender, uint256 coins) internal {
+        allowance[owner][spender] = coins;
+        emit Approval(owner, spender, coins);
+    }
+
+    /**
      * Internal
      */
+
+    function _tick(address account) internal returns (uint256 shares) {
+        Buffer.Data memory buffer = bufferOf[account];
+
+        if (buffer.epoch > 0 && epochs[buffer.epoch].filled) {
+            shares = buffer.toShares(epochs);
+
+            if (shares == 0)
+                shares = buffer.amount;
+
+            sharesOf[account] += shares;
+            delete bufferOf[account];
+        }
+    }
 
     function _verify(uint256 expected) internal view {
         if (_balance(coin) < expected) {
@@ -288,30 +424,6 @@ contract Recycler is Auth {
         );
         require(success && returndata.length >= 32);
         balance = abi.decode(returndata, (uint256));
-    }
-
-    function _decreaseAllowance(address from, uint amount) internal virtual returns (bool) {
-        if (from != msg.sender) {
-            uint256 allowed = allowance[from][msg.sender];
-
-            if (allowed != type(uint).max) {
-                require(allowed >= amount, "ERC20: Insufficient approval");
-                unchecked { _setAllowance(from, msg.sender, allowed - amount); }
-            }
-        }
-
-        return true;
-    }
-
-    function _setAllowance(address owner, address spender, uint amount)
-        internal
-        virtual
-        returns (bool)
-    {
-        allowance[owner][spender] = amount;
-        emit Approval(owner, spender, amount);
-
-        return true;
     }
 
     function _blockTimestamp() internal view returns (uint32) {
