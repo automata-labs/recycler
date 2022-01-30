@@ -37,6 +37,8 @@ contract Recycler is Auth {
     error InvalidEpoch();
     /// @notice Throws when the permit signature is invalid.
     error InvalidSignature();
+    /// @notice Throws when the max capacity is exceeded.
+    error OverflowCapacity();
     /// @notice Throws when an amount parameter is less than dust.
     error ParameterDust();
     /// @notice Throws when an amount parameter is zero.
@@ -64,6 +66,8 @@ contract Recycler is Auth {
     address public immutable coin;
     /// @notice The minimum amount of tokens that needs to be deposited.
     uint256 public immutable dust;
+    /// @notice The max capacity of the vault (in tTOKE).
+    uint256 public capacity;
     /// @notice The current epoch id.
     uint256 public cursor;
     /// @notice The epochs to batch together deposits and share issuances.
@@ -87,6 +91,7 @@ contract Recycler is Auth {
         coin = coin_;
         dust = dust_;
 
+        capacity = type(uint256).max;
         epochs[0].filled = true;
 
         INITIAL_CHAIN_ID = block.chainid;
@@ -153,9 +158,17 @@ contract Recycler is Auth {
         return epochs[index];
     }
 
+    function previewMint() external view returns (uint256) {
+
+    }
+
+    function previewBurn() external view returns (uint256) {
+
+    }
+
     /**
-    * ERC-20 actions
-    */
+     * ERC-20 actions
+     */
 
     function transfer(address to, uint256 coins)
         external
@@ -252,6 +265,11 @@ contract Recycler is Auth {
         if (buffer == 0 || buffer < dust)
             revert ParameterDust();
 
+        uint256 balance = _balance(coin);
+
+        if (balance + buffer > capacity)
+            revert OverflowCapacity();
+
         if (epochs[cursor].filled || epochs[cursor].deadline < _blockTimestamp())
             revert EpochExpired();
 
@@ -259,7 +277,6 @@ contract Recycler is Auth {
             revert BufferExists();
 
         // pull coins
-        uint256 balance = _balance(coin);
         ICallback(msg.sender).mintCallback(data);
         _verify(balance + buffer);
 
