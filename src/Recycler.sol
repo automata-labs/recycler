@@ -2,6 +2,8 @@
 pragma solidity ^0.8.0;
 
 import "yield-utils-v2/token/IERC20.sol";
+import "yield-utils-v2/token/IERC20Metadata.sol";
+import "yield-utils-v2/token/IERC2612.sol";
 
 import "./libraries/data/Buffer.sol";
 import "./libraries/data/Coin.sol";
@@ -12,8 +14,10 @@ import "./libraries/Cast.sol";
 import "./libraries/Revert.sol";
 import "./libraries/SafeTransfer.sol";
 import "./interfaces/ICallback.sol";
+import "./interfaces/IRecycler.sol";
 
-contract Recycler is Auth {
+/// @title Recycler
+contract Recycler is IRecycler, Auth {
     using Buffer for Buffer.Data;
     using Cast for uint256;
     using Coin for uint256;
@@ -44,10 +48,10 @@ contract Recycler is Auth {
     /// @notice Throws when an amount parameter is zero.
     error ParameterZero();
 
-    /// @dev Emitted when coins are moved from one address to another.
-    event Transfer(address indexed from, address indexed to, uint256 amount);
-    /// @dev Emitted when `approval` or `permit` sets the allowance.
-    event Approval(address indexed owner, address indexed spender, uint256 amount);
+    // /// @dev Emitted when coins are moved from one address to another.
+    // event Transfer(address indexed from, address indexed to, uint256 amount);
+    // /// @dev Emitted when `approval` or `permit` sets the allowance.
+    // event Approval(address indexed owner, address indexed spender, uint256 amount);
 
     /// @notice The total amount of shares issued.
     uint256 public totalShares;
@@ -80,8 +84,8 @@ contract Recycler is Auth {
     /// @notice The initial domain separator set at deployment.
     bytes32 private immutable INITIAL_DOMAIN_SEPARATOR;
 
-    /// @notice Converts buffer into shares if the buffer's epoch has been filled - otherwise the
-    ///     function does nothing.
+    /// @notice Converts an account's buffer into shares if the buffer's epoch has been filled -
+    ///     otherwise the function does nothing.
     modifier tick(address account) {
         _tick(account);
         _;
@@ -95,7 +99,7 @@ contract Recycler is Auth {
         epochs[0].filled = true;
 
         INITIAL_CHAIN_ID = block.chainid;
-        INITIAL_DOMAIN_SEPARATOR = computerDomainSeparator();
+        INITIAL_DOMAIN_SEPARATOR = computeDomainSeparator();
     }
 
     /**
@@ -105,35 +109,41 @@ contract Recycler is Auth {
     function DOMAIN_SEPARATOR() public view returns (bytes32) {
         return block.chainid == INITIAL_CHAIN_ID
             ? INITIAL_DOMAIN_SEPARATOR
-            : computerDomainSeparator();
+            : computeDomainSeparator();
     }
 
     /**
      * ERC-20 derived
      */
 
+    /// @inheritdoc IERC20Metadata
     function name() public pure returns (string memory) {
         return "(Re)cycle Staked Tokemak";
     }
 
+    /// @inheritdoc IERC20Metadata
     function symbol() external pure returns (string memory) {
         return "(re)tTOKE";
     }
 
+    /// @inheritdoc IERC20Metadata
     function decimals() external pure returns (uint8) {
         return 18;
     }
 
+    /// @dev Override to change version.
     function version() public pure returns (string memory) {
         return "1";
     }
 
-    /// @notice Returns the total amount of active- and buffering coins.
+    /// @inheritdoc IERC20
+    /// @dev Returns the total amount of active- and buffering coins.
     function totalSupply() external view returns (uint256) {
         return IERC20(coin).balanceOf(address(this));
     }
 
-    /// @notice Returns only the number of active coins (i.e. coins not being buffered).
+    /// @inheritdoc IERC20
+    /// @dev Returns only the number of active coins (i.e. coins not being buffered).
     function balanceOf(address account) external view returns (uint256) {
         uint256 shares = bufferOf[account].toShares(epochs) + sharesOf[account];
         return shares.toCoins(totalCoins(), totalShares);
@@ -143,33 +153,30 @@ contract Recycler is Auth {
      * Core derived
      */
     
-    /// @notice Returns the total amount of active coins.
+    /// @inheritdoc IRecycler
     function totalCoins() public view returns (uint256) {
         return IERC20(coin).balanceOf(address(this)) - totalBuffer;
     }
 
-    /// @notice Returns the buffer of `account` as a struct.
+    /// @inheritdoc IRecycler
     function bufferAs(address account) external view returns (Buffer.Data memory) {
         return bufferOf[account];
     }
 
-    /// @notice Returns the epoch at `index` as a struct.
+    /// @inheritdoc IRecycler
     function epochOf(uint256 index) external view returns (Epoch.Data memory) {
         return epochs[index];
     }
 
-    function previewMint() external view returns (uint256) {
+    function previewMint() external view returns (uint256) {}
 
-    }
-
-    function previewBurn() external view returns (uint256) {
-
-    }
+    function previewBurn() external view returns (uint256) {}
 
     /**
      * ERC-20 actions
      */
 
+    /// @inheritdoc IERC20
     function transfer(address to, uint256 coins)
         external
         noauth
@@ -181,6 +188,7 @@ contract Recycler is Auth {
         return true;
     }
 
+    /// @inheritdoc IERC20
     function transferFrom(address from, address to, uint256 coins)
         external
         noauth
@@ -193,12 +201,18 @@ contract Recycler is Auth {
         return true;
     }
 
-    function approve(address spender, uint256 coins) external returns (bool) {
+    /// @inheritdoc IERC20
+    function approve(address spender, uint256 coins)
+        external
+        noauth
+        returns (bool)
+    {
         _approve(msg.sender, spender, coins);
 
         return true;
     }
 
+    /// @inheritdoc IERC2612
     function permit(
         address owner,
         address spender,
@@ -207,7 +221,10 @@ contract Recycler is Auth {
         uint8 v,
         bytes32 r,
         bytes32 s
-    ) external virtual {
+    )
+        external
+        noauth
+    {
         if (deadline < block.timestamp)
             revert DeadlineExpired();
 
@@ -239,6 +256,7 @@ contract Recycler is Auth {
      * Core actions
      */
 
+    /// @inheritdoc IRecycler
     function next(uint32 deadline)
         external
         auth
@@ -247,6 +265,7 @@ contract Recycler is Auth {
         epochs[(id = ++cursor)].deadline = deadline;
     }
 
+    /// @inheritdoc IRecycler
     function poke(address account)
         external
         noauth
@@ -255,8 +274,7 @@ contract Recycler is Auth {
         return _tick(account);
     }
 
-    /// @notice Deposit buffered coins at a the cursor's epoch.
-    /// @dev The buffered coins turns into shares when the epoch has been filled using `fill`.
+    /// @inheritdoc IRecycler
     function mint(address to, uint256 buffer, bytes memory data)
         external
         noauth
@@ -289,6 +307,7 @@ contract Recycler is Auth {
         emit Transfer(address(0), to, buffer);
     }
 
+    /// @inheritdoc IRecycler
     function burn(address from, address to, uint256 coins)
         external
         noauth
@@ -311,6 +330,7 @@ contract Recycler is Auth {
         emit Transfer(from, address(0), coins);
     }
 
+    /// @inheritdoc IRecycler
     function exit(address from, address to, uint256 buffer)
         external
         noauth
@@ -332,6 +352,7 @@ contract Recycler is Auth {
         emit Transfer(from, address(0), buffer);
     }
 
+    /// @inheritdoc IRecycler
     function fill(uint256 epoch)
         external
         auth
@@ -350,6 +371,7 @@ contract Recycler is Auth {
         epochs[epoch].filled = true;
     }
 
+    /// @inheritdoc IRecycler
     function execute(address[] calldata targets, bytes[] calldata datas)
         external
         auth
@@ -377,7 +399,8 @@ contract Recycler is Auth {
      * ERC-20 internal
      */
     
-    function computerDomainSeparator() internal virtual view returns (bytes32) {
+    /// @notice Computes the domain seprator.
+    function computeDomainSeparator() internal virtual view returns (bytes32) {
         return keccak256(
             abi.encode(
                 keccak256("EIP712Domain(string name,string version,uint256 chainid,address verifyingContract)"),
@@ -389,6 +412,7 @@ contract Recycler is Auth {
         );
     }
 
+    /// @notice Internal transfer function that takes coins as parameter and modifies shares.
     function _transfer(address from, address to, uint256 coins) internal {
         uint256 shares = coins.toShares(totalShares, totalCoins());
         sharesOf[from] -= shares;
@@ -396,6 +420,7 @@ contract Recycler is Auth {
         emit Transfer(msg.sender, to, coins);
     }
 
+    /// @notice Decreases allowance - useful for burning, exiting, etc.
     function _decreaseAllowance(address from, uint256 coins) internal {
         if (from != msg.sender) {
             uint256 allowed = allowance[from][msg.sender];
@@ -406,6 +431,7 @@ contract Recycler is Auth {
         }
     }
 
+    /// @notice Helper approve function.
     function _approve(address owner, address spender, uint256 coins) internal {
         allowance[owner][spender] = coins;
         emit Approval(owner, spender, coins);
@@ -415,6 +441,7 @@ contract Recycler is Auth {
      * Internal
      */
 
+    /// @notice Ticks an account - used for the `tick` modifier.
     function _tick(address account) internal returns (uint256 shares) {
         Buffer.Data memory buffer = bufferOf[account];
 
@@ -429,12 +456,15 @@ contract Recycler is Auth {
         }
     }
 
+    /// @notice Verify that funds has been pulled.
+    /// @dev Used in conjunction with callbacks.
     function _verify(uint256 expected) internal view {
         if (_balance(coin) < expected) {
             revert InsufficientTransfer();
         }
     }
 
+    /// @notice The balance of a token for this contract.
     function _balance(address token_) internal view returns (uint256 balance) {
         (bool success, bytes memory returndata) = token_.staticcall(
             abi.encodeWithSelector(IERC20.balanceOf.selector, address(this))
@@ -443,6 +473,7 @@ contract Recycler is Auth {
         balance = abi.decode(returndata, (uint256));
     }
 
+    /// @notice Returns the block timestamp casted to `uint32`.
     function _blockTimestamp() internal view returns (uint32) {
         return uint32(block.timestamp);
     }
