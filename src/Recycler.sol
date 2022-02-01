@@ -48,11 +48,6 @@ contract Recycler is IRecycler, Auth {
     /// @notice Throws when an amount parameter is zero.
     error ParameterZero();
 
-    // /// @dev Emitted when coins are moved from one address to another.
-    // event Transfer(address indexed from, address indexed to, uint256 amount);
-    // /// @dev Emitted when `approval` or `permit` sets the allowance.
-    // event Approval(address indexed owner, address indexed spender, uint256 amount);
-
     /// @notice The total amount of shares issued.
     uint256 public totalShares;
     /// @notice The total amount of tokens being buffered into shares.
@@ -77,8 +72,6 @@ contract Recycler is IRecycler, Auth {
     /// @notice The epochs to batch together deposits and share issuances.
     mapping(uint256 => Epoch.Data) public epochs;
 
-    /// @notice The permit typehash used for `permit`.
-    bytes32 public constant PERMIT_TYPEHASH = keccak256("Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)");
     /// @notice The initial chain id set at deployment.
     uint256 private immutable INITIAL_CHAIN_ID;
     /// @notice The initial domain separator set at deployment.
@@ -103,18 +96,20 @@ contract Recycler is IRecycler, Auth {
     }
 
     /**
-     * EIP-2612
+     * ERC-20
      */
 
+    /// @notice The permit typehash.
+    function PERMIT_TYPEHASH() public pure returns (bytes32) {
+        return keccak256("Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)");
+    }
+
+    /// @notice The domain separator.
     function DOMAIN_SEPARATOR() public view returns (bytes32) {
         return block.chainid == INITIAL_CHAIN_ID
             ? INITIAL_DOMAIN_SEPARATOR
             : computeDomainSeparator();
     }
-
-    /**
-     * ERC-20 derived
-     */
 
     /// @inheritdoc IERC20Metadata
     function name() public pure returns (string memory) {
@@ -148,33 +143,6 @@ contract Recycler is IRecycler, Auth {
         uint256 shares = bufferOf[account].toShares(epochs) + sharesOf[account];
         return shares.toCoins(totalCoins(), totalShares);
     }
-
-    /**
-     * Core derived
-     */
-    
-    /// @inheritdoc IRecycler
-    function totalCoins() public view returns (uint256) {
-        return IERC20(coin).balanceOf(address(this)) - totalBuffer;
-    }
-
-    /// @inheritdoc IRecycler
-    function bufferAs(address account) external view returns (Buffer.Data memory) {
-        return bufferOf[account];
-    }
-
-    /// @inheritdoc IRecycler
-    function epochOf(uint256 index) external view returns (Epoch.Data memory) {
-        return epochs[index];
-    }
-
-    function previewMint() external view returns (uint256) {}
-
-    function previewBurn() external view returns (uint256) {}
-
-    /**
-     * ERC-20 actions
-     */
 
     /// @inheritdoc IERC20
     function transfer(address to, uint256 coins)
@@ -234,7 +202,7 @@ contract Recycler is IRecycler, Auth {
                 DOMAIN_SEPARATOR(),
                 keccak256(
                     abi.encode(
-                        keccak256("Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)"),
+                        PERMIT_TYPEHASH(),
                         owner,
                         spender,
                         coins,
@@ -253,7 +221,34 @@ contract Recycler is IRecycler, Auth {
     }
 
     /**
-     * Core actions
+     * State derived
+     */
+    
+    /// @inheritdoc IRecycler
+    function totalCoins() public view returns (uint256) {
+        return IERC20(coin).balanceOf(address(this)) - totalBuffer;
+    }
+
+    /// @inheritdoc IRecycler
+    function bufferAs(address account) external view returns (Buffer.Data memory) {
+        return bufferOf[account];
+    }
+
+    /// @inheritdoc IRecycler
+    function epochOf(uint256 index) external view returns (Epoch.Data memory) {
+        return epochs[index];
+    }
+
+    /**
+     * Previews
+     */
+
+    function previewMint() external view returns (uint256) {}
+
+    function previewBurn() external view returns (uint256) {}
+
+    /**
+     * Actions
      */
 
     /// @inheritdoc IRecycler
@@ -438,7 +433,7 @@ contract Recycler is IRecycler, Auth {
     }
 
     /**
-     * Internal
+     * Recycler internal
      */
 
     /// @notice Ticks an account - used for the `tick` modifier.

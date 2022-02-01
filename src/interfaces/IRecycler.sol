@@ -52,7 +52,8 @@ interface IRecycler is IERC20, IERC20Metadata, IERC2612 {
     function previewMint() external view returns (uint256);
     function previewBurn() external view returns (uint256);
 
-    /// @notice Fast-forward to next epoch (iff the previous epoch is already filled).
+    /// @notice Fast-forward to next epoch.
+    /// @dev A new epoch can be created without the previous being filled.
     function next(uint32 deadline) external returns (uint256 id);
     /// @notice Converts an account's buffer into shares if the buffer's epoch has been filled -
     ///     otherwise the function does nothing.
@@ -60,9 +61,15 @@ interface IRecycler is IERC20, IERC20Metadata, IERC2612 {
     /// @notice Deposit buffered coins at a the cursor's epoch.
     /// @dev The buffered coins turns into shares when the epoch has been filled using `fill`.
     function mint(address to, uint256 buffer, bytes memory data) external;
+    /// @notice Burn buffered-shares and shares to get back the underlying coin.
     function burn(address from, address to, uint256 coins) external returns (uint256 shares);
+    /// @notice Exit the recycler without earning any rewards.
+    /// @dev Can be used if the epochs never gets filled by a manager/admin.
     function exit(address from, address to, uint256 buffer) external;
+    /// @notice Fill an epoch with shares (iff the previous epoch is already filled).
     function fill(uint256 epoch) external returns (uint256 shares);
+    /// @notice Execute arbitrary calls.
+    /// @dev Used for e.g. claiming and voting.
     function execute(
         address[] calldata targets,
         bytes[] calldata datas
