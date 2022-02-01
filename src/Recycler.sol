@@ -5,6 +5,8 @@ import "yield-utils-v2/token/IERC20.sol";
 import "yield-utils-v2/token/IERC20Metadata.sol";
 import "yield-utils-v2/token/IERC2612.sol";
 
+import "./interfaces/ICallback.sol";
+import "./interfaces/IRecycler.sol";
 import "./libraries/data/Buffer.sol";
 import "./libraries/data/Coin.sol";
 import "./libraries/data/Epoch.sol";
@@ -13,8 +15,6 @@ import "./libraries/Auth.sol";
 import "./libraries/Cast.sol";
 import "./libraries/Revert.sol";
 import "./libraries/SafeTransfer.sol";
-import "./interfaces/ICallback.sol";
-import "./interfaces/IRecycler.sol";
 
 /// @title Recycler
 contract Recycler is IRecycler, Auth {
