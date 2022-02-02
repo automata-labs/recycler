@@ -138,7 +138,7 @@ contract Recycler is IRecycler, Auth {
     }
 
     /// @inheritdoc IERC20
-    /// @dev Returns only the number of active coins (i.e. coins not being buffered).
+    /// @dev Returns only the number of active coins (i.e. not including buffered coins).
     function balanceOf(address account) external view returns (uint256) {
         uint256 shares = bufferOf[account].toShares(epochs) + sharesOf[account];
         return shares.toCoins(totalCoins(), totalShares);
@@ -297,7 +297,7 @@ contract Recycler is IRecycler, Auth {
         epochs[cursor].amount += buffer.u104();
         totalBuffer += buffer;
         bufferOf[to].epoch = cursor.u32();
-        bufferOf[to].amount = buffer.u224();
+        bufferOf[to].amount += buffer.u224();
 
         emit Transfer(address(0), to, buffer);
     }
