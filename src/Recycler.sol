@@ -47,6 +47,8 @@ contract Recycler is IRecycler, Auth {
     error ParameterDust();
     /// @notice Throws when an amount parameter is zero.
     error ParameterZero();
+    /// @notice Throws when the selector is not matchable.
+    error UndefinedSelector();
 
     /// @notice The total amount of shares issued.
     uint256 public totalShares;
@@ -64,7 +66,7 @@ contract Recycler is IRecycler, Auth {
     /// @notice The staked Tokemak token.
     address public immutable coin;
     /// @notice The minimum amount of tokens that needs to be deposited.
-    uint256 public immutable dust;
+    uint256 public dust;
     /// @notice The max capacity of the vault (in tTOKE).
     uint256 public capacity;
     /// @notice The current epoch id.
@@ -94,10 +96,6 @@ contract Recycler is IRecycler, Auth {
         INITIAL_CHAIN_ID = block.chainid;
         INITIAL_DOMAIN_SEPARATOR = computeDomainSeparator();
     }
-
-    /**
-     * ERC-20
-     */
 
     /// @notice The permit typehash.
     function PERMIT_TYPEHASH() public pure returns (bytes32) {
@@ -137,11 +135,31 @@ contract Recycler is IRecycler, Auth {
         return IERC20(coin).balanceOf(address(this));
     }
 
+    /// @inheritdoc IRecycler
+    function totalCoins() public view returns (uint256) {
+        return IERC20(coin).balanceOf(address(this)) - totalBuffer;
+    }
+
     /// @inheritdoc IERC20
     /// @dev Returns only the number of active coins (i.e. not including buffered coins).
     function balanceOf(address account) external view returns (uint256) {
         uint256 shares = bufferOf[account].toShares(epochs) + sharesOf[account];
         return shares.toCoins(totalCoins(), totalShares);
+    }
+
+    /// @inheritdoc IRecycler
+    function queuedOf(address account) external view returns (uint256) {
+        return bufferOf[account].toQueued(epochs);
+    }
+
+    /// @inheritdoc IRecycler
+    function epochOf(uint256 index) external view returns (Epoch.Data memory) {
+        return epochs[index];
+    }
+
+    /// @inheritdoc IRecycler
+    function bufferAs(address account) external view returns (Buffer.Data memory) {
+        return bufferOf[account];
     }
 
     /// @inheritdoc IERC20
@@ -221,40 +239,20 @@ contract Recycler is IRecycler, Auth {
     }
 
     /**
-     * State derived
-     */
-    
-    /// @inheritdoc IRecycler
-    function totalCoins() public view returns (uint256) {
-        return IERC20(coin).balanceOf(address(this)) - totalBuffer;
-    }
-
-    /// @inheritdoc IRecycler
-    function queuedOf(address account) external view returns (uint256) {
-        return bufferOf[account].toQueued(epochs);
-    }
-
-    /// @inheritdoc IRecycler
-    function bufferAs(address account) external view returns (Buffer.Data memory) {
-        return bufferOf[account];
-    }
-
-    /// @inheritdoc IRecycler
-    function epochOf(uint256 index) external view returns (Epoch.Data memory) {
-        return epochs[index];
-    }
-
-    /**
-     * Previews
-     */
-
-    function previewMint() external view returns (uint256) {}
-
-    function previewBurn() external view returns (uint256) {}
-
-    /**
      * Actions
      */
+
+    function set(bytes4 selector, bytes memory data)
+        external
+        auth
+    {
+        if (selector == IRecycler.dust.selector)
+            dust = abi.decode(data, (uint256));
+        else if (selector == IRecycler.capacity.selector)
+            capacity = abi.decode(data, (uint256));
+        else
+            revert UndefinedSelector();
+    }
 
     /// @inheritdoc IRecycler
     function next(uint32 deadline)
@@ -394,6 +392,14 @@ contract Recycler is IRecycler, Auth {
             }
         }
     }
+
+    /**
+     * Previews
+     */
+
+    function previewMint() external view returns (uint256) {}
+
+    function previewBurn() external view returns (uint256) {}
 
     /**
      * ERC-20 internal

@@ -46,6 +46,22 @@ contract RecyclerTest is DSTest, Vm, Utilities {
     }
 
     /**
+     * `set`
+     */
+    
+    function testSet() public {
+        recycler.set(IRecycler.dust.selector, abi.encode(123e18));
+        assertEq(recycler.dust(), 123e18);
+        recycler.set(IRecycler.capacity.selector, abi.encode(456e18));
+        assertEq(recycler.capacity(), 456e18);
+    }
+
+    function testSetUndefinedSelectorError() public {
+        expectRevert(abi.encodeWithSignature("UndefinedSelector()"));
+        recycler.set(bytes4(0), abi.encode(123e18));
+    }
+
+    /**
      * `next`
      */
 
