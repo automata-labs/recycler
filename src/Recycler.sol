@@ -230,6 +230,11 @@ contract Recycler is IRecycler, Auth {
     }
 
     /// @inheritdoc IRecycler
+    function queuedOf(address account) external view returns (uint256) {
+        return bufferOf[account].toQueued(epochs);
+    }
+
+    /// @inheritdoc IRecycler
     function bufferAs(address account) external view returns (Buffer.Data memory) {
         return bufferOf[account];
     }

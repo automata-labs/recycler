@@ -45,6 +45,8 @@ interface IRecycler is IERC20, IERC20Metadata, IERC2612 {
 
     /// @notice Returns the total amount of active coins.
     function totalCoins() external view returns (uint256);
+    /// @notice Returns the amount of current buffered coins.
+    function queuedOf(address account) external view returns (uint256);
     /// @notice Returns the buffer of `account` as a struct.
     function bufferAs(address account) external view returns (Buffer.Data memory);
     /// @notice Returns the epoch at `index` as a struct.

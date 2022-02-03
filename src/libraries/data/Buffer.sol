@@ -9,6 +9,17 @@ library Buffer {
         uint224 amount;
     }
 
+    function toQueued(
+        Buffer.Data memory self,
+        mapping(uint256 => Epoch.Data) storage epochs
+    ) internal view returns (uint256) {
+        if (epochs[self.epoch].amount > 0 && epochs[self.epoch].filled) {
+            return 0;
+        } else {
+            return self.amount;
+        }
+    }
+
     function toShares(
         Buffer.Data memory self,
         mapping(uint256 => Epoch.Data) storage epochs

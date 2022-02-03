@@ -105,6 +105,18 @@ contract RecyclerTest is DSTest, Vm, Utilities {
         assertEq(recycler.balanceOf(address(this)), 2e18);
     }
 
+    function testMintMultipleDepositsOnSameEpoch() public {
+        recycler.next(uint32(block.timestamp + 1));
+
+        user0.mint(1e18);
+        user0.mint(1e18);
+        user0.mint(1e18);
+        assertEq(recycler.balanceOf(address(user0)), 0);
+
+        recycler.fill(1);
+        assertEq(recycler.balanceOf(address(user0)), 3e18);
+    }
+
     function testMintTickBufferIfFilled() public {
         recycler.next(uint32(block.timestamp + 1));
 
