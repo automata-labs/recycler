@@ -47,12 +47,19 @@ interface IRecycler is IERC20, IERC20Metadata, IERC2612 {
     function totalCoins() external view returns (uint256);
     /// @notice Returns the amount of current buffered coins.
     function queuedOf(address account) external view returns (uint256);
-    /// @notice Returns the buffer of `account` as a struct.
-    function bufferAs(address account) external view returns (Buffer.Data memory);
     /// @notice Returns the epoch at `index` as a struct.
     function epochOf(uint256 index) external view returns (Epoch.Data memory);
-    function previewMint() external view returns (uint256);
-    function previewBurn() external view returns (uint256);
+    /// @notice Returns the buffer of `account` as a struct.
+    function bufferAs(address account) external view returns (Buffer.Data memory);
+
+    /// @notice Returns a boolean on mint status.
+    /// @dev If false - then the given `mint` call will revert.
+    /// Could be due to cycle rollover, deadline or other reasons.
+    function mintable(address to, uint256 buffer) external view returns (uint256);
+    /// @notice Returns the status and burn amount.
+    /// @dev If false - then a `burn` call will revert.
+    /// Could be due to cycle rollover, deadline or other reasons.
+    function burnable(address from, uint256 coins) external view returns (bool, uint256 shares);
 
     /// @notice Fast-forward to next epoch.
     /// @dev A new epoch can be created without the previous being filled.

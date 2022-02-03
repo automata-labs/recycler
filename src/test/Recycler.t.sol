@@ -46,6 +46,28 @@ contract RecyclerTest is DSTest, Vm, Utilities {
     }
 
     /**
+     * `mintable`
+     */
+
+    function testMintable() public {
+        assertEq(recycler.mintable(address(user0), 0), 1);
+        assertEq(recycler.mintable(address(user0), 1), 3);
+
+        recycler.next(uint32(block.timestamp) + 100);
+        assertEq(recycler.mintable(address(user0), 1), 0);
+
+        recycler.set(IRecycler.dust.selector, abi.encode(uint256(1e18)));
+        recycler.set(IRecycler.capacity.selector, abi.encode(uint256(2e18)));
+        assertEq(recycler.mintable(address(user0), 1e18 - 1), 1);
+        assertEq(recycler.mintable(address(user0), 2e18 + 1), 2);
+
+        recycler.set(IRecycler.dust.selector, abi.encode(0));
+        user0.mint(1e18);
+        recycler.next(uint32(block.timestamp) + 100);
+        assertEq(recycler.mintable(address(user0), 1e18), 4);
+    }
+
+    /**
      * `set`
      */
     
