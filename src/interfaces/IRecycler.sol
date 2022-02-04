@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: GPL-3.0-or-later
 pragma solidity ^0.8.0;
 
 import "yield-utils-v2/token/IERC20.sol";
@@ -52,6 +52,8 @@ interface IRecycler is IERC20, IERC20Metadata, IERC2612 {
     /// @notice Returns the buffer of `account` as a struct.
     function bufferAs(address account) external view returns (Buffer.Data memory);
 
+    /// @notice Returns whether the cycle is rolling over or not.
+    function rotating() external view returns (bool);
     /// @notice Returns a boolean on mint status.
     /// @dev If false - then the given `mint` call will revert.
     /// Could be due to cycle rollover, deadline or other reasons.

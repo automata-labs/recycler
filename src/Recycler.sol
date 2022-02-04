@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: BUSL-1.1
+// SPDX-License-Identifier: GPL-3.0-or-later
 pragma solidity ^0.8.0;
 
 import "yield-utils-v2/token/IERC20.sol";
@@ -241,6 +241,15 @@ contract Recycler is IRecycler, Auth {
     /**
      * Previews
      */
+
+    /// @inheritdoc IRecycler
+    function rotating() external view returns (bool) {
+        if (epochs[cursor].filled || epochs[cursor].deadline < _blockTimestamp()) {
+            return true;
+        } else {
+            return false;
+        }
+    }
 
     /// @inheritdoc IRecycler
     function mintable(address to, uint256 buffer) external view returns (uint256) {
