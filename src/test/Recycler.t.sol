@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0
+// SPDX-License-Identifier: GPL-3.0-or-later
 pragma solidity ^0.8.0;
 
 import "ds-test/test.sol";
@@ -20,6 +20,10 @@ contract RecyclerTest is DSTest, Vm, Utilities {
             emit log("Error: Assertion Failed");
             fail();
         }
+    }
+
+    function _deadline(uint32 extra) internal view returns (uint32) {
+        return uint32(block.timestamp) + extra;
     }
 
     function setUp() public {
@@ -83,6 +87,13 @@ contract RecyclerTest is DSTest, Vm, Utilities {
         recycler.set(bytes4(0), abi.encode(123e18));
     }
 
+    function testSetUnauthorizedError() public {
+        startPrank(address(user0));
+        expectRevert("Denied");
+        recycler.set(bytes4(0), abi.encode(0));
+        stopPrank();
+    }
+
     /**
      * `next`
      */
@@ -95,24 +106,43 @@ contract RecyclerTest is DSTest, Vm, Utilities {
         assertEq(recycler.cursor(), 1);
 
         // epoch: 0
-        assertEq(recycler.epochOf(0).deadline, 0);
-        assertEq(recycler.epochOf(0).amount, 0);
-        assertEq(recycler.epochOf(0).shares, 0);
-        assertEq(recycler.epochOf(0).filled, true);
+        assertEq(recycler.epochAs(0).deadline, 0);
+        assertEq(recycler.epochAs(0).amount, 0);
+        assertEq(recycler.epochAs(0).shares, 0);
+        assertEq(recycler.epochAs(0).filled, true);
         // epoch: 1
-        assertEq(recycler.epochOf(1).deadline, deadline);
-        assertEq(recycler.epochOf(1).amount, 0);
-        assertEq(recycler.epochOf(1).shares, 0);
-        assertEq(recycler.epochOf(1).filled, false);
+        assertEq(recycler.epochAs(1).deadline, deadline);
+        assertEq(recycler.epochAs(1).amount, 0);
+        assertEq(recycler.epochAs(1).shares, 0);
+        assertEq(recycler.epochAs(1).filled, false);
 
         // go to next cursor and check and its epoch
         recycler.next(deadline + 1);
         assertEq(recycler.cursor(), 2);
-        assertEq(recycler.epochOf(2).deadline, deadline + 1);
+        assertEq(recycler.epochAs(2).deadline, deadline + 1);
 
         // check that there are two unfilled epochs in a row
-        assertEq(recycler.epochOf(1).filled, false);
-        assertEq(recycler.epochOf(2).filled, false);
+        assertEq(recycler.epochAs(1).filled, false);
+        assertEq(recycler.epochAs(2).filled, false);
+    }
+
+    function testNextPast() public {
+    }
+
+    function testNextZero() public {
+        recycler.next(0);
+        assertEq(recycler.cursor(), 1);
+        assertEq(recycler.epochAs(1).deadline, 0);
+        assertEq(recycler.epochAs(1).amount, 0);
+        assertEq(recycler.epochAs(1).shares, 0);
+        assertEq(recycler.epochAs(1).filled, false);
+    }
+
+    function testNextUnauthorizedError() public {
+        startPrank(address(user0));
+        expectRevert("Denied");
+        recycler.next(0);
+        stopPrank();
     }
 
     /**
@@ -203,16 +233,57 @@ contract RecyclerTest is DSTest, Vm, Utilities {
         assertEq(recycler.balanceOf(address(user0)), 3e18 + 1);
     }
 
+    function testMintOnInitializedContractError() public {
+        mint(address(this), 1e18);
+        tokeVotePool.approve(address(manager), type(uint256).max);
+        expectRevert(abi.encodeWithSignature("EpochExpired()"));
+        manager.mint(address(this), 1e18);
+    }
+
     function testMintInsufficientTransferError() public {
+        recycler.next(_deadline(100));
+
+        tokeVotePool.approve(address(manager), type(uint256).max);
+        expectRevert("SafeTransferFailed");
+        manager.mint(address(this), 1e18);
     }
 
     function testMintEpochExpiredWhenFilledError() public {
+        recycler.next(_deadline(1));
+        recycler.fill(1);
+
+        mint(address(this), 1e18);
+        tokeVotePool.approve(address(manager), type(uint256).max);
+        expectRevert(abi.encodeWithSignature("EpochExpired()"));
+        manager.mint(address(this), 1e18);
     }
 
     function testMintEpochExpiredWhenDeadlinePassedError() public {
+        recycler.next(_deadline(100));
+        // timetravel to when deadline is hit
+        warp(_deadline(101));
+
+        mint(address(this), 1e18);
+        tokeVotePool.approve(address(manager), type(uint256).max);
+        expectRevert(abi.encodeWithSignature("EpochExpired()"));
+        manager.mint(address(this), 1e18);
     }
 
     function testMintPastBufferExistsButNotFilledError() public {
+        recycler.next(_deadline(1));
+        // deposit
+        mint(address(this), 1e18);
+        tokeVotePool.approve(address(manager), type(uint256).max);
+        manager.mint(address(this), 1e18);
+
+        // go to next epochs and try deposit again, which should fail
+        recycler.next(_deadline(2)); // time does not actually need to increase, but w/e
+        recycler.next(_deadline(3));
+
+        // throw error
+        mint(address(this), 1e18);
+        expectRevert(abi.encodeWithSignature("BufferExists()"));
+        manager.mint(address(this), 1e18);
     }
 
     /**
@@ -220,10 +291,38 @@ contract RecyclerTest is DSTest, Vm, Utilities {
      */
 
     function testBurn() public {
-        setUpBurn();
+        recycler.next(_deadline(1));
+        user0.mint(1e18);
+        recycler.fill(1);
 
-        uint256 balance = recycler.balanceOf(address(this));
-        recycler.burn(address(this), address(this), balance);
+        uint256 balance = recycler.balanceOf(address(user0));
+        startPrank(address(user0));
+        recycler.burn(address(user0), address(user0), balance);
+        assertEq(tokeVotePool.balanceOf(address(user0)), balance);
+        stopPrank();
+    }
+
+    function testBurnUsingAllowance() public {
+        recycler.next(_deadline(1));
+        user0.mint(1e18);
+        recycler.fill(1);
+
+        startPrank(address(user0));
+        recycler.approve(address(this), 1e18);
+        stopPrank();
+
+        recycler.burn(address(user0), address(user1), 1e18);
+        assertEq(recycler.balanceOf(address(user0)), 0);
+        assertEq(tokeVotePool.balanceOf(address(user1)), 1e18);
+    }
+
+    function testBurnWhenNotAllowedError() public {
+        recycler.next(_deadline(1));
+        user0.mint(1e18);
+        recycler.fill(1);
+
+        expectRevert(abi.encodeWithSignature("Panic(uint256)", 0x11));
+        recycler.burn(address(user0), address(user1), 1e18);
     }
 
     /**
@@ -242,10 +341,10 @@ contract RecyclerTest is DSTest, Vm, Utilities {
         assertEq(recycler.sharesOf(address(this)), 0);
         assertEq(recycler.bufferAs(address(this)).epoch, 1);
         assertEq(recycler.bufferAs(address(this)).amount, 1e18);
-        assertEq(recycler.epochOf(1).deadline, uint32(block.timestamp + 1));
-        assertEq(recycler.epochOf(1).amount, 1e18);
-        assertEq(recycler.epochOf(1).shares, 0);
-        assertEq(recycler.epochOf(1).filled, false);
+        assertEq(recycler.epochAs(1).deadline, uint32(block.timestamp + 1));
+        assertEq(recycler.epochAs(1).amount, 1e18);
+        assertEq(recycler.epochAs(1).shares, 0);
+        assertEq(recycler.epochAs(1).filled, false);
 
         recycler.fill(1);
 
@@ -255,10 +354,10 @@ contract RecyclerTest is DSTest, Vm, Utilities {
         assertEq(recycler.sharesOf(address(this)), 0); // + shares zero bc not tick:ed
         assertEq(recycler.bufferAs(address(this)).epoch, 1);
         assertEq(recycler.bufferAs(address(this)).amount, 1e18);
-        assertEq(recycler.epochOf(1).deadline, uint32(block.timestamp + 1));
-        assertEq(recycler.epochOf(1).amount, 1e18);
-        assertEq(recycler.epochOf(1).shares, 1e18); // +
-        assertEq(recycler.epochOf(1).filled, true); // +
+        assertEq(recycler.epochAs(1).deadline, uint32(block.timestamp + 1));
+        assertEq(recycler.epochAs(1).amount, 1e18);
+        assertEq(recycler.epochAs(1).shares, 1e18); // +
+        assertEq(recycler.epochAs(1).filled, true); // +
     }
 
     /**

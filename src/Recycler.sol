@@ -50,29 +50,29 @@ contract Recycler is IRecycler, Auth {
     /// @notice Throws when the selector is not matchable.
     error UndefinedSelector();
 
-    /// @notice The total amount of shares issued.
-    uint256 public totalShares;
-    /// @notice The total amount of tokens being buffered into shares.
-    uint256 public totalBuffer;
-    /// @notice The mapping for keeping track of shares that each account has.
-    mapping(address => uint256) public sharesOf;
-    /// @notice The mapping for keeping track of buffered tokens.
-    mapping(address => Buffer.Data) public bufferOf;
-    /// @notice The mapping for allowance.
-    mapping(address => mapping(address => uint256)) public allowance;
-    /// @notice The mapping for nonces.
-    mapping(address => uint256) public nonces;
-
-    /// @notice The staked Tokemak token.
+    /// @inheritdoc IRecycler
     address public immutable coin;
-    /// @notice The minimum amount of tokens that needs to be deposited.
+    /// @inheritdoc IRecycler
     uint256 public dust;
-    /// @notice The max capacity of the vault (in tTOKE).
+    /// @inheritdoc IRecycler
     uint256 public capacity;
-    /// @notice The current epoch id.
+    /// @inheritdoc IRecycler
     uint256 public cursor;
-    /// @notice The epochs to batch together deposits and share issuances.
-    mapping(uint256 => Epoch.Data) public epochs;
+
+    /// @inheritdoc IRecycler
+    uint256 public totalShares;
+    /// @inheritdoc IRecycler
+    uint256 public totalBuffer;
+    /// @inheritdoc IRecycler
+    mapping(address => uint256) public sharesOf;
+    /// @inheritdoc IRecycler
+    mapping(address => Buffer.Data) public bufferOf;
+    /// @inheritdoc IRecycler
+    mapping(uint256 => Epoch.Data) public epochOf;
+    /// @inheritdoc IRecycler
+    mapping(address => mapping(address => uint256)) public allowance;
+    /// @inheritdoc IRecycler
+    mapping(address => uint256) public nonces;
 
     /// @notice The initial chain id set at deployment.
     uint256 private immutable INITIAL_CHAIN_ID;
@@ -91,7 +91,7 @@ contract Recycler is IRecycler, Auth {
         dust = dust_;
 
         capacity = type(uint256).max;
-        epochs[0].filled = true;
+        epochOf[0].filled = true;
 
         INITIAL_CHAIN_ID = block.chainid;
         INITIAL_DOMAIN_SEPARATOR = computeDomainSeparator();
@@ -143,18 +143,18 @@ contract Recycler is IRecycler, Auth {
     /// @inheritdoc IERC20
     /// @dev Returns only the number of active coins (i.e. not including buffered coins).
     function balanceOf(address account) external view returns (uint256) {
-        uint256 shares = bufferOf[account].toShares(epochs) + sharesOf[account];
+        uint256 shares = bufferOf[account].toShares(epochOf) + sharesOf[account];
         return shares.toCoins(totalCoins(), totalShares);
     }
 
     /// @inheritdoc IRecycler
     function queuedOf(address account) external view returns (uint256) {
-        return bufferOf[account].toQueued(epochs);
+        return bufferOf[account].toQueued(epochOf);
     }
 
     /// @inheritdoc IRecycler
-    function epochOf(uint256 index) external view returns (Epoch.Data memory) {
-        return epochs[index];
+    function epochAs(uint256 index) external view returns (Epoch.Data memory) {
+        return epochOf[index];
     }
 
     /// @inheritdoc IRecycler
@@ -244,7 +244,7 @@ contract Recycler is IRecycler, Auth {
 
     /// @inheritdoc IRecycler
     function rotating() external view returns (bool) {
-        if (epochs[cursor].filled || epochs[cursor].deadline < _blockTimestamp()) {
+        if (epochOf[cursor].filled || epochOf[cursor].deadline < _blockTimestamp()) {
             return true;
         } else {
             return false;
@@ -259,10 +259,10 @@ contract Recycler is IRecycler, Auth {
         if (_balance(coin) + buffer > capacity)
             return 2;
 
-        if (epochs[cursor].filled || epochs[cursor].deadline < _blockTimestamp())
+        if (epochOf[cursor].filled || epochOf[cursor].deadline < _blockTimestamp())
             return 3;
 
-        if (!epochs[bufferOf[to].epoch].filled)
+        if (!epochOf[bufferOf[to].epoch].filled)
             return 4;
 
         return 0;
@@ -288,6 +288,7 @@ contract Recycler is IRecycler, Auth {
      * Actions
      */
 
+    /// @inheritdoc IRecycler
     function set(bytes4 selector, bytes memory data)
         external
         auth
@@ -306,7 +307,7 @@ contract Recycler is IRecycler, Auth {
         auth
         returns (uint256 id)
     {
-        epochs[(id = ++cursor)].deadline = deadline;
+        epochOf[(id = ++cursor)].deadline = deadline;
     }
 
     /// @inheritdoc IRecycler
@@ -332,7 +333,7 @@ contract Recycler is IRecycler, Auth {
         if (balance + buffer > capacity)
             revert OverflowCapacity();
 
-        if (epochs[cursor].filled || epochs[cursor].deadline < _blockTimestamp())
+        if (epochOf[cursor].filled || epochOf[cursor].deadline < _blockTimestamp())
             revert EpochExpired();
 
         if (bufferOf[to].amount > 0 && bufferOf[to].epoch != cursor)
@@ -343,7 +344,7 @@ contract Recycler is IRecycler, Auth {
         _verify(balance + buffer);
 
         // update state
-        epochs[cursor].amount += buffer.u104();
+        epochOf[cursor].amount += buffer.u104();
         totalBuffer += buffer;
         bufferOf[to].epoch = cursor.u32();
         bufferOf[to].amount += buffer.u224();
@@ -384,7 +385,7 @@ contract Recycler is IRecycler, Auth {
             revert ParameterZero();
 
         _decreaseAllowance(from, buffer);
-        epochs[bufferOf[from].epoch].amount -= buffer.u104();
+        epochOf[bufferOf[from].epoch].amount -= buffer.u104();
         totalBuffer -= buffer;
         bufferOf[to].amount -= buffer.u224();
 
@@ -405,14 +406,14 @@ contract Recycler is IRecycler, Auth {
         if (epoch == 0)
             revert InvalidEpoch();
 
-        if (!epochs[epoch - 1].filled)
+        if (!epochOf[epoch - 1].filled)
             revert Discontinuity();
 
-        shares = epochs[epoch].toShares(totalShares, totalCoins());
+        shares = epochOf[epoch].toShares(totalShares, totalCoins());
         totalShares += shares;
-        totalBuffer -= epochs[epoch].amount;
-        epochs[epoch].shares = shares.u104();
-        epochs[epoch].filled = true;
+        totalBuffer -= epochOf[epoch].amount;
+        epochOf[epoch].shares = shares.u104();
+        epochOf[epoch].filled = true;
     }
 
     /// @inheritdoc IRecycler
@@ -489,8 +490,8 @@ contract Recycler is IRecycler, Auth {
     function _tick(address account) internal returns (uint256 shares) {
         Buffer.Data memory buffer = bufferOf[account];
 
-        if (buffer.epoch > 0 && epochs[buffer.epoch].filled) {
-            shares = buffer.toShares(epochs);
+        if (buffer.epoch > 0 && epochOf[buffer.epoch].filled) {
+            shares = buffer.toShares(epochOf);
 
             if (shares == 0)
                 shares = buffer.amount;
@@ -503,9 +504,8 @@ contract Recycler is IRecycler, Auth {
     /// @notice Verify that funds has been pulled.
     /// @dev Used in conjunction with callbacks.
     function _verify(uint256 expected) internal view {
-        if (_balance(coin) < expected) {
+        if (_balance(coin) < expected)
             revert InsufficientTransfer();
-        }
     }
 
     /// @notice The balance of a token for this contract.

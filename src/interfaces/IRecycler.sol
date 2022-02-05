@@ -9,6 +9,15 @@ import "../libraries/data/Buffer.sol";
 import "../libraries/data/Epoch.sol";
 
 interface IRecycler is IERC20, IERC20Metadata, IERC2612 {
+    /// @notice The staked Tokemak token.
+    function coin() external view returns (address);
+    /// @notice The minimum amount of tokens that needs to be deposited.
+    function dust() external view returns (uint256);
+    /// @notice The max capacity of the vault (in `coin`).
+    function capacity() external view returns (uint256);
+    /// @notice The current epoch id.
+    function cursor() external view returns (uint256);
+
     /// @notice The total amount of shares issued.
     function totalShares() external view returns (uint256);
     /// @notice The total amount of tokens being buffered into shares.
@@ -17,26 +26,17 @@ interface IRecycler is IERC20, IERC20Metadata, IERC2612 {
     function sharesOf(address account) external view returns (uint256);
     /// @notice The mapping for keeping track of buffered tokens.
     function bufferOf(address account) external view returns (uint32 epoch, uint224 amount);
-    /// @notice The mapping for allowance.
-    function allowance(address owner, address spender) external view returns (uint256);
-    /// @notice The mapping for nonces.
-    function nonces(address owner) external view returns (uint256);
-
-    /// @notice The staked Tokemak token.
-    function coin() external view returns (address);
-    /// @notice The staked Tokemak token.
-    function dust() external view returns (uint256);
-    /// @notice The max capacity of the vault (in tTOKE).
-    function capacity() external view returns (uint256);
-    /// @notice The current epoch id.
-    function cursor() external view returns (uint256);
-    /// @notice The current epoch id.
-    function epochs(uint256 epoch) external view returns (
+    /// @notice The epoch mapping to batch deposits and -share issuances.
+    function epochOf(uint256 epoch) external view returns (
         uint32 deadline,
         uint104 amount,
         uint104 shares,
         bool filled
     );
+    /// @notice The mapping for allowance.
+    function allowance(address owner, address spender) external view returns (uint256);
+    /// @notice The mapping for nonces.
+    function nonces(address owner) external view returns (uint256);
 
     /// @notice The permit typehash used for `permit`.
     function PERMIT_TYPEHASH() external view returns (bytes32);
@@ -47,8 +47,8 @@ interface IRecycler is IERC20, IERC20Metadata, IERC2612 {
     function totalCoins() external view returns (uint256);
     /// @notice Returns the amount of current buffered coins.
     function queuedOf(address account) external view returns (uint256);
-    /// @notice Returns the epoch at `index` as a struct.
-    function epochOf(uint256 index) external view returns (Epoch.Data memory);
+    /// @notice Returns the epoch as a struct.
+    function epochAs(uint256 epoch) external view returns (Epoch.Data memory);
     /// @notice Returns the buffer of `account` as a struct.
     function bufferAs(address account) external view returns (Buffer.Data memory);
 
@@ -63,6 +63,8 @@ interface IRecycler is IERC20, IERC20Metadata, IERC2612 {
     /// Could be due to cycle rollover, deadline or other reasons.
     function burnable(address from, uint256 coins) external view returns (bool, uint256 shares);
 
+    /// @notice The setter function.
+    function set(bytes4 selector, bytes memory data) external;
     /// @notice Fast-forward to next epoch.
     /// @dev A new epoch can be created without the previous being filled.
     function next(uint32 deadline) external returns (uint256 id);
