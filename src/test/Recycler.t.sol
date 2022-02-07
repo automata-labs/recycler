@@ -403,6 +403,8 @@ contract RecyclerTest is DSTest, Vm, Utilities {
      * `fill`
      */
 
+    // fills normally, without any excessive coins.
+    // this means that coins <=> shares in this unit test.
     function testFill() public {
         mint(address(this), 1e18);
         tokeVotePool.approve(address(manager), type(uint256).max);
@@ -454,6 +456,53 @@ contract RecyclerTest is DSTest, Vm, Utilities {
         assertEq(recycler.epochAs(3).filled, true); // +
     }
 
+    // should have an excessive amount of coins per share
+    function testFillWithEarnedCoinsOnShares() public {
+        recycler.next(_deadline(1));
+
+        user0.mint(1e18);
+        user1.mint(3e18);
+        mint(address(recycler), 1e18);
+        recycler.fill(1);
+
+        assertEq(recycler.totalShares(), 4e18);
+        assertEq(recycler.epochAs(1).amount, 4e18);
+        assertEq(recycler.epochAs(1).shares, 4e18);
+        assertEq(recycler.balanceOf(address(user0)), 1e18 + 25e16);
+        assertEq(recycler.balanceOf(address(user1)), 3e18 + 75e16);
+
+        recycler.poke(address(user0));
+        recycler.poke(address(user1));
+        assertEq(recycler.sharesOf(address(user0)), 1e18);
+        assertEq(recycler.sharesOf(address(user1)), 3e18);
+
+        // user2 joins mid-next epoch
+        // user2 does not get the rewards bc just joined, they start earning next epoch
+        recycler.next(_deadline(1));
+        user2.mint(5e18);
+        mint(address(recycler), 1e18);
+        recycler.fill(2);
+
+        // should be 7.333...e18
+        // user2 gets (5 * 4 / 6) shares
+        assertEq(recycler.totalShares(), 7333333333333333333);
+        assertEq(recycler.epochAs(2).amount, 5e18);
+        assertEq(recycler.epochAs(2).shares, 3333333333333333333);
+        assertEq(recycler.balanceOf(address(user0)), 1e18 + 5e17);
+        assertEq(recycler.balanceOf(address(user1)), 3e18 + 15e17);
+        // loss of 1 decimal
+        // this is expected - bc we avoid underflows when burning/exiting
+        assertEq(recycler.balanceOf(address(user2)), 4999999999999999999);
+
+        // check shares one last time
+        recycler.poke(address(user0));
+        recycler.poke(address(user1));
+        recycler.poke(address(user2));
+        assertEq(recycler.sharesOf(address(user0)), 1e18); // should be the same
+        assertEq(recycler.sharesOf(address(user1)), 3e18); // should be the same
+        assertEq(recycler.sharesOf(address(user2)), 3333333333333333333);
+    }
+
     function testFillDiscontinousError() public {
     }
 
@@ -477,6 +526,10 @@ contract RecyclerTest is DSTest, Vm, Utilities {
     function testPokeOnEmptyBuffer() public {
         recycler.poke(address(this));
         assertEq(recycler.balanceOf(address(this)), 0);
+        recycler.poke(address(user0));
+        assertEq(recycler.balanceOf(address(user0)), 0);
+        recycler.poke(address(user1));
+        assertEq(recycler.balanceOf(address(user1)), 0);
     }
 
     function testPokeOnAlreadyTickedBuffer() public {
