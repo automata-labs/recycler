@@ -50,6 +50,22 @@ contract RecyclerTest is DSTest, Vm, Utilities {
     }
 
     /**
+     * `pause`
+     */
+
+    function testPause() public {
+        recycler.pause(IRecycler.mint.selector);
+        assertEq(recycler.paused(IRecycler.mint.selector), 1);
+    }
+
+    function testPauseUnauthorizedError() public {
+        startPrank(address(user0));
+        expectRevert("Denied");
+        recycler.pause(IRecycler.mint.selector);
+        stopPrank();
+    }
+
+    /**
      * `mintable`
      */
 
@@ -231,6 +247,15 @@ contract RecyclerTest is DSTest, Vm, Utilities {
 
         recycler.fill(3);
         assertEq(recycler.balanceOf(address(user0)), 3e18 + 1);
+    }
+
+    function testMintPausedError() public {
+        mint(address(this), 1e18);
+        tokeVotePool.approve(address(manager), type(uint256).max);
+
+        recycler.pause(IRecycler.mint.selector);
+        expectRevert("Paused");
+        manager.mint(address(this), 1e18);
     }
 
     function testMintOnInitializedContractError() public {

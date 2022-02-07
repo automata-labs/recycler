@@ -13,11 +13,12 @@ import "./libraries/data/Epoch.sol";
 import "./libraries/data/Share.sol";
 import "./libraries/Auth.sol";
 import "./libraries/Cast.sol";
+import "./libraries/Pause.sol";
 import "./libraries/Revert.sol";
 import "./libraries/SafeTransfer.sol";
 
 /// @title Recycler
-contract Recycler is IRecycler, Auth {
+contract Recycler is IRecycler, Auth, Pause {
     using Buffer for Buffer.Data;
     using Cast for uint256;
     using Coin for uint256;
@@ -360,6 +361,7 @@ contract Recycler is IRecycler, Auth {
     function mint(address to, uint256 buffer, bytes memory data)
         external
         noauth
+        playback
         tick(to)
     {
         if (buffer == 0 || buffer < dust)
