@@ -25,6 +25,40 @@ contract Recycler is IRecycler, Auth {
     using SafeTransfer for address;
     using Share for uint256;
 
+    /// @notice Emitted when a variable is set.
+    /// @param sender The `msg.sender`.
+    /// @param selector The selector of the variable.
+    /// @param data The value that the variable should change into.
+    event Set(address indexed sender, bytes4 indexed selector, bytes data);
+    /// @notice Emitted when creating a new epoch.
+    /// @param sender The `msg.sender`.
+    /// @param cursor The epoch id of the created epoch.
+    /// @param deadline The deadline mint unix timestamp of the epoch.
+    event Next(address indexed sender, uint256 indexed cursor, uint32 deadline);
+    /// @notice Emitted when buffering coins into the vault.
+    /// @param sender The `msg.sender`.
+    /// @param to The address to receive the buffered coins balance.
+    /// @param buffer The amount of coins being buffered.
+    event Mint(address indexed sender, address indexed to, uint256 buffer);
+    /// @notice Emitted when burning shares for coins.
+    /// @param sender The `msg.sender`.
+    /// @param from The address to burn shares from.
+    /// @param to The address to receive the redeemed coins.
+    /// @param coins The amount of coins being buffered.
+    event Burn(address indexed sender, address indexed from, address indexed to, uint256 coins);
+    /// @notice Emitted when exiting into coins.
+    /// @param sender The `msg.sender`.
+    /// @param from The address to burn buffer from.
+    /// @param to The address to receive the buffered coins.
+    /// @param buffer The amount of coins being withdrawn.
+    event Exit(address indexed sender, address indexed from, address indexed to, uint256 buffer);
+    /// @notice Emitted when an epoch is filled.
+    /// @param sender The `msg.sender`.
+    /// @param epoch The id of the epoch that was filled.
+    /// @param coins The amount of coins that was deposited into the epoch when it was open.
+    /// @param shares The amount of shares issued to the epoch when it was filled.
+    event Fill(address indexed sender, uint256 indexed epoch, uint256 coins, uint256 shares);
+
     /// @notice Throws when trying to mint when a buffer still exists and cannot be ticked/poked.
     error BufferExists();
     /// @notice Throws when permit deadline has expired.
@@ -299,6 +333,8 @@ contract Recycler is IRecycler, Auth {
             capacity = abi.decode(data, (uint256));
         else
             revert UndefinedSelector();
+
+        emit Set(msg.sender, selector, data);
     }
 
     /// @inheritdoc IRecycler
@@ -308,6 +344,7 @@ contract Recycler is IRecycler, Auth {
         returns (uint256 id)
     {
         epochOf[(id = ++cursor)].deadline = deadline;
+        emit Next(msg.sender, id, deadline);
     }
 
     /// @inheritdoc IRecycler
@@ -350,6 +387,7 @@ contract Recycler is IRecycler, Auth {
         bufferOf[to].amount += buffer.u224();
 
         emit Transfer(address(0), to, buffer);
+        emit Mint(msg.sender, to, buffer);
     }
 
     /// @inheritdoc IRecycler
@@ -373,6 +411,7 @@ contract Recycler is IRecycler, Auth {
         coin.safeTransfer(to, coins);
 
         emit Transfer(from, address(0), coins);
+        emit Burn(msg.sender, from, to, coins);
     }
 
     /// @inheritdoc IRecycler
@@ -395,6 +434,7 @@ contract Recycler is IRecycler, Auth {
         coin.safeTransfer(to, buffer);
 
         emit Transfer(from, address(0), buffer);
+        emit Exit(msg.sender, from, to, buffer);
     }
 
     /// @inheritdoc IRecycler
@@ -414,6 +454,8 @@ contract Recycler is IRecycler, Auth {
         totalBuffer -= epochOf[epoch].amount;
         epochOf[epoch].shares = shares.u104();
         epochOf[epoch].filled = true;
+
+        emit Fill(msg.sender, epoch, epochOf[epoch].amount, shares);
     }
 
     /// @inheritdoc IRecycler
