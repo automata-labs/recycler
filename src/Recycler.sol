@@ -286,39 +286,6 @@ contract Recycler is IRecycler, Auth, Pause {
         }
     }
 
-    /// @inheritdoc IRecycler
-    function mintable(address to, uint256 buffer) external view returns (uint256) {
-        if (buffer == 0 || buffer < dust)
-            return 1;
-
-        if (_balance(coin) + buffer > capacity)
-            return 2;
-
-        if (epochOf[cursor].filled || epochOf[cursor].deadline < _blockTimestamp())
-            return 3;
-
-        if (!epochOf[bufferOf[to].epoch].filled)
-            return 4;
-
-        return 0;
-    }
-
-    /// @inheritdoc IRecycler
-    function burnable(address from, uint256 coins) external view returns (bool, uint256) {
-        if (coins == 0)
-            return (false, 0);
-
-        uint256 shares = coins.toShares(totalShares, totalCoins());
-
-        if (shares == 0)
-            return (false, 0);
-
-        if (from != msg.sender && coins < allowance[from][msg.sender])
-            return (false, shares);
-
-        return (true, shares);
-    }
-
     /**
      * Actions
      */

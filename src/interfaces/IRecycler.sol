@@ -54,14 +54,6 @@ interface IRecycler is IERC20, IERC20Metadata, IERC2612 {
 
     /// @notice Returns whether the cycle is rolling over or not.
     function rotating() external view returns (bool);
-    /// @notice Returns a boolean on mint status.
-    /// @dev If false - then the given `mint` call will revert.
-    /// Could be due to cycle rollover, deadline or other reasons.
-    function mintable(address to, uint256 buffer) external view returns (uint256);
-    /// @notice Returns the status and burn amount.
-    /// @dev If false - then a `burn` call will revert.
-    /// Could be due to cycle rollover, deadline or other reasons.
-    function burnable(address from, uint256 coins) external view returns (bool, uint256 shares);
 
     /// @notice The setter function.
     function set(bytes4 selector, bytes memory data) external;
