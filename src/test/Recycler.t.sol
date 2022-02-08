@@ -504,6 +504,26 @@ contract RecyclerTest is DSTest, Vm, Utilities {
     }
 
     function testFillDiscontinousError() public {
+        recycler.next(0);
+        assertEq(recycler.cursor(), 1);
+
+        recycler.next(0);
+        assertEq(recycler.cursor(), 2);
+
+        recycler.next(0);
+        assertEq(recycler.cursor(), 3);
+
+        expectRevert(abi.encodeWithSignature("Discontinuity()"));
+        recycler.fill(2);
+        expectRevert(abi.encodeWithSignature("Discontinuity()"));
+        recycler.fill(3);
+
+        recycler.fill(1);
+        recycler.fill(2);
+        recycler.fill(3);
+        assertEq(recycler.epochAs(1).filled, true);
+        assertEq(recycler.epochAs(2).filled, true);
+        assertEq(recycler.epochAs(3).filled, true);
     }
 
     /**
