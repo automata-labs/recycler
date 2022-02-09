@@ -26,11 +26,15 @@ contract Recycler is IRecycler, Auth, Pause {
     using SafeTransfer for address;
     using Share for uint256;
 
-    /// @notice Emitted when a variable is set.
-    /// @param sender The `msg.sender`.
-    /// @param selector The selector of the variable.
-    /// @param data The value that the variable should change into.
-    event Set(address indexed sender, bytes4 indexed selector, bytes data);
+    /// @notice Emitted when dust is set.
+    /// @param dust The set dust value.
+    event SetDust(uint256 dust);
+    /// @notice Emitted when capacity is set.
+    /// @param capacity The set capacity value.
+    event SetCapacity(uint256 capacity);
+    /// @notice Emitted when a new deadline is set for an epoch
+    /// @param epoch The set capacity value.
+    event SetDeadline(uint256 epoch, uint32 deadline);
     /// @notice Emitted when creating a new epoch.
     /// @param sender The `msg.sender`.
     /// @param cursor The epoch id of the created epoch.
@@ -291,18 +295,33 @@ contract Recycler is IRecycler, Auth, Pause {
      */
 
     /// @inheritdoc IRecycler
-    function set(bytes4 selector, bytes memory data)
+    function setDust(uint256 dust_)
         external
         auth
     {
-        if (selector == IRecycler.dust.selector)
-            dust = abi.decode(data, (uint256));
-        else if (selector == IRecycler.capacity.selector)
-            capacity = abi.decode(data, (uint256));
-        else
-            revert UndefinedSelector();
+        dust = dust_;
+        emit SetDust(dust);
+    }
 
-        emit Set(msg.sender, selector, data);
+    /// @inheritdoc IRecycler
+    function setCapacity(uint256 capacity_)
+        external
+        auth
+    {
+        capacity = capacity_;
+        emit SetCapacity(dust);
+    }
+
+    /// @inheritdoc IRecycler
+    function setDeadline(uint256 epoch, uint32 deadline)
+        external
+        auth
+    {
+        if (epoch == 0)
+            revert InvalidEpoch();
+
+        epochOf[epoch].deadline = deadline;
+        emit SetDeadline(epoch, deadline);
     }
 
     /// @inheritdoc IRecycler

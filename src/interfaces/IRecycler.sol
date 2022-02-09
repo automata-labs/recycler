@@ -55,8 +55,12 @@ interface IRecycler is IERC20, IERC20Metadata, IERC2612 {
     /// @notice Returns whether the cycle is rolling over or not.
     function rotating() external view returns (bool);
 
-    /// @notice The setter function.
-    function set(bytes4 selector, bytes memory data) external;
+    /// @notice Set the dust value.
+    function setDust(uint256 dust_) external;
+    /// @notice Set the capacity value.
+    function setCapacity(uint256 capacity_) external;
+    /// @notice Set the deadline for an epoch.
+    function setDeadline(uint256 epoch, uint32 deadline) external;
     /// @notice Fast-forward to next epoch.
     /// @dev A new epoch can be created without the previous being filled.
     function next(uint32 deadline) external returns (uint256 id);
