@@ -33,14 +33,14 @@ contract RecyclerManagerTest is DSTest, Utilities {
      */
 
     function testMint() public {
-        mint(address(this), 1e18);
+        realloc_ttoke(address(this), 1e18);
         recyclerManager.mint(address(this), 1e18);
         assertEq(recycler.bufferAs(address(this)).epoch, 1);
         assertEq(recycler.bufferAs(address(this)).amount, 1e18);
     }
 
     function testMintZeroError() public {
-        mint(address(this), 1e18);
+        realloc_ttoke(address(this), 1e18);
         expectRevert(abi.encodeWithSignature("ParameterDust()"));
         recyclerManager.mint(address(this), 0);
     }
@@ -57,7 +57,7 @@ contract RecyclerManagerTest is DSTest, Utilities {
     }
 
     function testMintCallback() public {
-        mint(address(user0), 1e18);
+        realloc_ttoke(address(user0), 1e18);
         startPrank(address(user0));
         tokeVotePool.approve(address(recyclerManager), type(uint256).max);
         stopPrank();
@@ -76,7 +76,7 @@ contract RecyclerManagerTest is DSTest, Utilities {
 
     // should not allow anyone expect for recycler to call the `mintCallback` function
     function testMintCallbackNotRecyclerError() public {
-        mint(address(user0), 1e18);
+        realloc_ttoke(address(user0), 1e18);
         startPrank(address(user0));
         tokeVotePool.approve(address(recyclerManager), type(uint256).max);
         stopPrank();
