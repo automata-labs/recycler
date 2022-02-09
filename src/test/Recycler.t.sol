@@ -19,7 +19,7 @@ contract User is Vm, Utilities {
 
     function mint(uint256 amount) public {
         startPrank(address(this));
-        mint(address(this), amount);
+        realloc_ttoke(address(this), amount);
         tokeVotePool.approve(address(manager), type(uint256).max);
         manager.mint(address(this), amount);
         stopPrank();
@@ -47,7 +47,7 @@ contract RecyclerTest is DSTest, Vm, Utilities {
     }
 
     function setUpBurn() public {
-        mint(address(this), 1e18);
+        realloc_ttoke(address(this), 1e18);
         tokeVotePool.approve(address(manager), type(uint256).max);
         recycler.next(uint32(block.timestamp + 1));
         manager.mint(address(this), 1e18);
@@ -178,7 +178,7 @@ contract RecyclerTest is DSTest, Vm, Utilities {
         assertEq(recycler.balanceOf(address(user0)), 0);
 
         // mint as this
-        mint(address(this), 3e18);
+        realloc_ttoke(address(this), 3e18);
         tokeVotePool.approve(address(manager), type(uint256).max);
         // mint only 2 of 3
         manager.mint(address(this), 2e18);
@@ -221,11 +221,11 @@ contract RecyclerTest is DSTest, Vm, Utilities {
         assertEq(recycler.bufferAs(address(user0)).amount, 1e18);
 
         // simulate compounding on the recycler...
-        mint(address(recycler), 1e18);
+        realloc_ttoke(address(recycler), 1e18);
 
         // should revert if next epoch hasn't started
         startPrank(address(user0));
-        mint(address(user0), 1e18);
+        realloc_ttoke(address(user0), 1e18);
         tokeVotePool.approve(address(manager), type(uint256).max);
         expectRevert(abi.encodeWithSignature("EpochExpired()"));
         manager.mint(address(user0), 1e18);
@@ -258,7 +258,7 @@ contract RecyclerTest is DSTest, Vm, Utilities {
 
     // throw if admin has paused mint
     function testMintPausedError() public {
-        mint(address(this), 1e18);
+        realloc_ttoke(address(this), 1e18);
         tokeVotePool.approve(address(manager), type(uint256).max);
 
         recycler.pause(IRecycler.mint.selector);
@@ -268,7 +268,7 @@ contract RecyclerTest is DSTest, Vm, Utilities {
 
     // throw when calling when only init:ed
     function testMintOnInitializedContractError() public {
-        mint(address(this), 1e18);
+        realloc_ttoke(address(this), 1e18);
         tokeVotePool.approve(address(manager), type(uint256).max);
         expectRevert(abi.encodeWithSignature("EpochExpired()"));
         manager.mint(address(this), 1e18);
@@ -288,7 +288,7 @@ contract RecyclerTest is DSTest, Vm, Utilities {
         recycler.next(_deadline(1));
         recycler.fill(1);
 
-        mint(address(this), 1e18);
+        realloc_ttoke(address(this), 1e18);
         tokeVotePool.approve(address(manager), type(uint256).max);
         expectRevert(abi.encodeWithSignature("EpochExpired()"));
         manager.mint(address(this), 1e18);
@@ -300,7 +300,7 @@ contract RecyclerTest is DSTest, Vm, Utilities {
         // timetravel to when deadline is hit
         warp(_deadline(101));
 
-        mint(address(this), 1e18);
+        realloc_ttoke(address(this), 1e18);
         tokeVotePool.approve(address(manager), type(uint256).max);
         expectRevert(abi.encodeWithSignature("EpochExpired()"));
         manager.mint(address(this), 1e18);
@@ -314,7 +314,7 @@ contract RecyclerTest is DSTest, Vm, Utilities {
     function testMintPastBufferExistsButNotFilledError() public {
         recycler.next(_deadline(1));
         // deposit
-        mint(address(this), 1e18);
+        realloc_ttoke(address(this), 1e18);
         tokeVotePool.approve(address(manager), type(uint256).max);
         manager.mint(address(this), 1e18);
 
@@ -323,7 +323,7 @@ contract RecyclerTest is DSTest, Vm, Utilities {
         recycler.next(_deadline(3));
 
         // throw error
-        mint(address(this), 1e18);
+        realloc_ttoke(address(this), 1e18);
         expectRevert(abi.encodeWithSignature("BufferExists()"));
         manager.mint(address(this), 1e18);
     }
@@ -377,7 +377,7 @@ contract RecyclerTest is DSTest, Vm, Utilities {
     // fills normally, without any excessive coins.
     // this means that coins <=> shares in this unit test.
     function testFill() public {
-        mint(address(this), 1e18);
+        realloc_ttoke(address(this), 1e18);
         tokeVotePool.approve(address(manager), type(uint256).max);
         recycler.next(uint32(block.timestamp + 1));
         manager.mint(address(this), 1e18);
@@ -433,7 +433,7 @@ contract RecyclerTest is DSTest, Vm, Utilities {
 
         user0.mint(1e18);
         user1.mint(3e18);
-        mint(address(recycler), 1e18);
+        realloc_ttoke(address(recycler), 1e18);
         recycler.fill(1);
 
         assertEq(recycler.totalShares(), 4e18);
@@ -451,7 +451,7 @@ contract RecyclerTest is DSTest, Vm, Utilities {
         // user2 does not get the rewards bc just joined, they start earning next epoch
         recycler.next(_deadline(1));
         user2.mint(5e18);
-        mint(address(recycler), 1e18);
+        realloc_ttoke(address(recycler), 1e18);
         recycler.fill(2);
 
         // should be 7.333...e18
@@ -558,7 +558,7 @@ contract RecyclerTest is DSTest, Vm, Utilities {
 
         warp(block.timestamp + 2);
         // block should revert bc deadline passed
-        mint(address(this), 1e18);
+        realloc_ttoke(address(this), 1e18);
         expectRevert(abi.encodeWithSignature("EpochExpired()"));
         manager.mint(address(this), 1e18);
 
@@ -569,7 +569,7 @@ contract RecyclerTest is DSTest, Vm, Utilities {
         // fill
         recycler.fill(1);
         // simulate compounding by minting
-        mint(address(recycler), 10e18);
+        realloc_ttoke(address(recycler), 10e18);
         
         /// balance should double bc the epoch has been filled
         assertEq(recycler.balanceOf(address(user0)), 2e18);

@@ -45,7 +45,7 @@ contract RecyclerFuzz is DSTest, Vm, Utilities {
     function testFillFuzz(uint32 deadline, uint104 amount) public {
         uint256 epoch = recycler.next(1);
 
-        mint(address(recycler), amount);
+        realloc_ttoke(address(recycler), amount);
         write_buffer(amount);
         assertEq(recycler.totalBuffer(), amount);
 

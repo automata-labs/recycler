@@ -23,13 +23,13 @@ contract Utilities is DSTest, Vm {
         store(address(toke), keccak256(abi.encode(account, 0)), bytes32(balance + amount));
     }
 
-    function realloc_reward_signer(address signer) public {
-        store(address(rewards), bytes32(uint256(2)), bytes32(uint256(uint160(signer))));
-    }
-
-    function mint(address account, uint256 amount) public {
+    function realloc_ttoke(address account, uint256 amount) public {
         uint256 balance = tokeVotePool.balanceOf(account);
         store(address(tokeVotePool), keccak256(abi.encode(account, 51)), bytes32(balance + amount));
+    }
+
+    function realloc_reward_signer(address signer) public {
+        store(address(rewards), bytes32(uint256(2)), bytes32(uint256(uint160(signer))));
     }
 
     function assertEq(bool x, bool y) internal {
