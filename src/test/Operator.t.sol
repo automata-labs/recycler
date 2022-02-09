@@ -79,6 +79,22 @@ contract OperatorTest is DSTest, Vm, Utilities {
     }
 
     /**
+     * `set*`
+     */
+
+    function testSet() public {
+        operator.setFeeTo(address(user0));
+        assertEq(operator.feeTo(), address(user0));
+
+        assertEq(operator.fee(), 100);
+        operator.setFee(0);
+        assertEq(operator.fee(), 0);
+
+        operator.setReactorKey(bytes32(0), true);
+        assertEq(operator.reactorKeys(bytes32(0)), true);
+    }
+
+    /**
      * `rollover`
      */
 
@@ -129,6 +145,32 @@ contract OperatorTest is DSTest, Vm, Utilities {
         assertEq(tokeVotePool.balanceOf(address(recycler)), 3e18);
     }
 
+    function testCompoundWithFee() public {
+        realloc_reward_signer(KeyPair.publicKey);
+        operator.setFeeTo(address(user0));
+
+        Recipient memory recipient;
+        uint8 v;
+        bytes32 r;
+        bytes32 s;
+
+        operator.prepare(type(uint256).max);
+
+        // compound once
+        (recipient, v, r, s) = buildRecipient(1, 181, address(recycler), 1e18, KeyPair.privateKey);
+        operator.compound(recipient, v, r, s);
+        assertEq(tokeVotePool.balanceOf(address(recycler)), 9e17 + 9e16);
+        // check feeTo got the fee
+        assertEq(toke.balanceOf(address(user0)), 1e16);
+
+        // compound one more time
+        (recipient, v, r, s) = buildRecipient(1, 181, address(recycler), 3e18, KeyPair.privateKey);
+        operator.compound(recipient, v, r, s);
+        assertEq(tokeVotePool.balanceOf(address(recycler)), 2e18 + 9e17 + 7e16);
+        // check feeTo got the fee
+        assertEq(toke.balanceOf(address(user0)), 3e16);
+    }
+
     /**
      * `claim`
      */
@@ -162,6 +204,20 @@ contract OperatorTest is DSTest, Vm, Utilities {
 
         // NOTE: the claimable amount is cumulative, so final amount should be 3e18
         assertEq(toke.balanceOf(address(recycler)), 3e18);
+    }
+
+    function testClaimWithFee() public {
+        realloc_reward_signer(KeyPair.publicKey);
+        operator.setFeeTo(address(user0));
+        operator.setFee(1000); // 10%
+
+        (Recipient memory recipient, uint8 v, bytes32 r, bytes32 s) =
+            buildRecipient(1, 181, address(recycler), 1e18, KeyPair.privateKey);
+
+        assertEq(toke.balanceOf(address(recycler)), 0);
+        operator.claim(recipient, v, r, s);
+        assertEq(toke.balanceOf(address(recycler)), 9e17);
+        assertEq(toke.balanceOf(address(user0)), 1e17);
     }
 
     /**
