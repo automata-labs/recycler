@@ -1,15 +1,17 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 pragma solidity ^0.8.0;
 
-import "./libraries/external/Tokemak.sol";
-import "./libraries/Auth.sol";
 import "./interfaces/external/IOnChainVoteL1.sol";
 import "./interfaces/external/IRewards.sol";
 import "./interfaces/external/IRewardsHash.sol";
 import "./interfaces/external/ITokeVotePool.sol";
+import "./interfaces/IOperator.sol";
 import "./interfaces/IRecycler.sol";
+import "./libraries/external/Tokemak.sol";
+import "./libraries/Auth.sol";
 
-contract Operator is Auth {
+/// @title Operator
+contract Operator is IOperator, Auth {
     /// @notice Emitted when the fee to is set.
     event SetFeeTo(address feeTo);
     /// @notice Emitted when the fee is set.
@@ -25,22 +27,22 @@ contract Operator is Auth {
     /// @notice The max fee that can be set.
     uint256 internal constant MAX_FEE = 1e4;
 
-    /// @notice The core reactor contract that holds the assets.
+    /// @inheritdoc IOperator
     address public immutable recycler;
-    /// @notice The underlying TOKE token.
+    /// @inheritdoc IOperator
     address public immutable underlying;
-    /// @notice The derivative tTOKE token.
+    /// @inheritdoc IOperator
     address public immutable derivative;
-    /// @notice The Tokemak voting contract.
+    /// @inheritdoc IOperator
     address public immutable onchainvote;
-    /// @notice The Tokemak rewards contract.
+    /// @inheritdoc IOperator
     address public immutable rewards;
-    /// @notice The recipient of the management fee.
-    address public feeTo;
-    /// @notice The management fee.
-    uint256 public fee;
 
-    /// @notice Accepted reactor keys that this contract can vote with.
+    /// @inheritdoc IOperator
+    address public feeTo;
+    /// @inheritdoc IOperator
+    uint256 public fee;
+    /// @inheritdoc IOperator
     mapping(bytes32 => bool) public reactorKeys;
 
     constructor(
@@ -59,7 +61,7 @@ contract Operator is Auth {
         fee = 100; // 1%
     }
 
-    /// @notice Sets the management fee to.
+    /// @inheritdoc IOperator
     function setFeeTo(address feeTo_)
         external
         auth
@@ -68,7 +70,7 @@ contract Operator is Auth {
         emit SetFeeTo(feeTo);
     }
 
-    /// @notice Sets the management fee.
+    /// @inheritdoc IOperator
     function setFee(uint256 fee_)
         external
         auth
@@ -80,7 +82,7 @@ contract Operator is Auth {
         emit SetFee(fee_);
     }
 
-    /// @notice Sets a reactor key as vaild/invalid.
+    /// @inheritdoc IOperator
     function setReactorKey(bytes32 reactorKey, bool value)
         external
         auth
@@ -88,9 +90,7 @@ contract Operator is Auth {
         reactorKeys[reactorKey] = value;
     }
 
-    /// @notice Claims TOKE, deposits TOKE for tTOKE, fills an `epoch` and creates an new epoch with
-    /// the a `deadline` - all in one transaction.
-    /// @dev A convenience function for the admin.
+    /// @inheritdoc IOperator
     function rollover(
         Recipient memory recipient,
         uint8 v,
@@ -111,7 +111,7 @@ contract Operator is Auth {
             IRecycler(recycler).next(deadline);
     }
 
-    /// @notice Claims- and stakes the token rewards to compound the assets.
+    /// @inheritdoc IOperator
     function compound(Recipient memory recipient, uint8 v, bytes32 r, bytes32 s)
         public
         auth
@@ -120,7 +120,7 @@ contract Operator is Auth {
         deposit(claimed);
     }
 
-    /// @notice Deposit TOKE for Recycler.
+    /// @inheritdoc IOperator
     function claim(Recipient memory recipient, uint8 v, bytes32 r, bytes32 s)
         public
         auth
@@ -151,7 +151,7 @@ contract Operator is Auth {
         }
     }
 
-    /// @notice Deposit TOKE for tTOKE for the Recycler.
+    /// @inheritdoc IOperator
     function deposit(uint256 amount)
         public
         auth
@@ -164,9 +164,7 @@ contract Operator is Auth {
         IRecycler(recycler).execute(targets, datas);
     }
 
-    /// @notice Approves the tTOKE to pull TOKE tokens from this contract.
-    /// @dev This is required because the tTOKE contract pulls fund using allowance to stake TOKE.
-    /// If not called before e.g. `deposit`, `compound` or `posteriori`, then the call will revert.
+    /// @inheritdoc IOperator
     function prepare(uint256 amount)
         external
         auth
@@ -179,8 +177,7 @@ contract Operator is Auth {
         IRecycler(recycler).execute(targets, datas);
     }
 
-    /// @notice Vote on Tokemak reactors using the Recycler.
-    /// @dev Each reactor key will be checked against a mapping to see if it's valid.
+    /// @inheritdoc IOperator
     function vote(UserVotePayload calldata data)
         external
         auth
