@@ -78,25 +78,37 @@ contract RecyclerTest is DSTest, Vm, Utilities {
     }
 
     /**
-     * `set`
+     * `set*`
      */
     
     function testSet() public {
-        recycler.set(IRecycler.dust.selector, abi.encode(123e18));
-        assertEq(recycler.dust(), 123e18);
-        recycler.set(IRecycler.capacity.selector, abi.encode(456e18));
-        assertEq(recycler.capacity(), 456e18);
-    }
+        recycler.next(0);
 
-    function testSetUndefinedSelectorError() public {
-        expectRevert(abi.encodeWithSignature("UndefinedSelector()"));
-        recycler.set(bytes4(0), abi.encode(123e18));
+        recycler.setDust(123e18);
+        assertEq(recycler.dust(), 123e18);
+        recycler.setCapacity(456e18);
+        assertEq(recycler.capacity(), 456e18);
+        recycler.setDeadline(1, uint32(block.timestamp));
+        assertEq(recycler.epochAs(1).deadline, uint32(block.timestamp));
+
+        recycler.setDust(0);
+        assertEq(recycler.dust(), 0);
+        recycler.setCapacity(0);
+        assertEq(recycler.capacity(), 0);
+        recycler.setDeadline(1, 0);
+        assertEq(recycler.epochAs(1).deadline, 0);
     }
 
     function testSetUnauthorizedError() public {
+        recycler.next(0);
+
         startPrank(address(user0));
         expectRevert("Denied");
-        recycler.set(bytes4(0), abi.encode(0));
+        recycler.setDust(0);
+        expectRevert("Denied");
+        recycler.setCapacity(0);
+        expectRevert("Denied");
+        recycler.setDeadline(1, 0);
         stopPrank();
     }
 
