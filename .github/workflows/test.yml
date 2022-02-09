@@ -25,4 +25,8 @@ jobs:
         shell: bash
         env:
           ALCHEMY_API_URI: ${{ secrets.ALCHEMY_API_URI }}
-        run: forge test -vvv --force --fork-url "$ALCHEMY_API_URI" --fork-block-number 14068398
+        run: FOUNDRY_FUZZ_RUNS=4096 forge test \
+          -vvv \
+          --force \
+          --fork-url "$ALCHEMY_API_URI" \
+          --fork-block-number 14167146
