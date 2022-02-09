@@ -13,12 +13,13 @@ import "./libraries/data/Epoch.sol";
 import "./libraries/data/Share.sol";
 import "./libraries/Auth.sol";
 import "./libraries/Cast.sol";
+import "./libraries/Lock.sol";
 import "./libraries/Pause.sol";
 import "./libraries/Revert.sol";
 import "./libraries/SafeTransfer.sol";
 
 /// @title Recycler
-contract Recycler is IRecycler, Auth, Pause {
+contract Recycler is IRecycler, Lock, Auth, Pause {
     using Buffer for Buffer.Data;
     using Cast for uint256;
     using Coin for uint256;
@@ -328,6 +329,7 @@ contract Recycler is IRecycler, Auth, Pause {
     function next(uint32 deadline)
         external
         auth
+        lock
         returns (uint256 id)
     {
         epochOf[(id = ++cursor)].deadline = deadline;
@@ -338,6 +340,7 @@ contract Recycler is IRecycler, Auth, Pause {
     function poke(address account)
         external
         noauth
+        lock
         returns (uint256)
     {
         return _tick(account);
@@ -347,6 +350,7 @@ contract Recycler is IRecycler, Auth, Pause {
     function mint(address to, uint256 buffer, bytes memory data)
         external
         noauth
+        lock
         playback
         tick(to)
     {
@@ -382,6 +386,7 @@ contract Recycler is IRecycler, Auth, Pause {
     function burn(address from, address to, uint256 coins)
         external
         noauth
+        lock
         tick(from)
         returns (uint256 shares)
     {
@@ -406,6 +411,7 @@ contract Recycler is IRecycler, Auth, Pause {
     function exit(address from, address to, uint256 buffer)
         external
         noauth
+        lock
         tick(from)
     {
         if (buffer == 0)
@@ -429,6 +435,7 @@ contract Recycler is IRecycler, Auth, Pause {
     function fill(uint256 epoch)
         external
         auth
+        lock
         returns (uint256 shares)
     {
         if (epoch == 0)

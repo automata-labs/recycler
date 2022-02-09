@@ -32,6 +32,28 @@ contract Utilities is DSTest, Vm {
         store(address(rewards), bytes32(uint256(2)), bytes32(uint256(uint160(signer))));
     }
 
+    function realloc_buffer(address recycler, uint256 amount) public {
+        store(recycler, bytes32(uint256(7)), bytes32(uint256(amount)));
+    }
+
+    function realloc_epoch(
+        address recycler,
+        uint256 epoch,
+        uint32 deadline,
+        uint104 amount,
+        uint104 shares,
+        bool filled
+    ) public {
+        uint256 word;
+
+        word = (filled) ? (1 << 240) : 0;
+        word += shares << 136;
+        word += amount << 32;
+        word += deadline << 0;
+
+        store(recycler, keccak256(abi.encode(epoch, 9)), bytes32(uint256(word)));
+    }
+
     function assertEq(bool x, bool y) internal {
         if (x != y) {
             emit log("Error: Assertion Failed");

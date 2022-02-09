@@ -10,27 +10,6 @@ import "./utils/Vm.sol";
 contract RecyclerFuzz is DSTest, Vm, Utilities {
     Recycler public recycler;
 
-    function write_buffer(uint256 amount) public {
-        store(address(recycler), bytes32(uint256(6)), bytes32(uint256(amount)));
-    }
-
-    function write_epoch(
-        uint256 epoch,
-        uint32 deadline,
-        uint104 amount,
-        uint104 shares,
-        bool filled
-    ) public {
-        uint256 word;
-
-        word = (filled) ? (1 << 240) : 0;
-        word += shares << 136;
-        word += amount << 32;
-        word += deadline << 0;
-
-        store(address(recycler), keccak256(abi.encode(epoch, 9)), bytes32(uint256(word)));
-    }
-
     function setUp() public {
         recycler = new Recycler(address(tokeVotePool), 0);
     }
@@ -46,10 +25,10 @@ contract RecyclerFuzz is DSTest, Vm, Utilities {
         uint256 epoch = recycler.next(1);
 
         realloc_ttoke(address(recycler), amount);
-        write_buffer(amount);
+        realloc_buffer(address(recycler), amount);
         assertEq(recycler.totalBuffer(), amount);
 
-        write_epoch(epoch, deadline, amount, 0, false);
+        realloc_epoch(address(recycler), epoch, deadline, amount, 0, false);
         recycler.fill(epoch);
         assertEq(recycler.epochAs(epoch).filled, true);
     }
