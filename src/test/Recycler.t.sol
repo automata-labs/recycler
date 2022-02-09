@@ -34,13 +34,6 @@ contract RecyclerTest is DSTest, Vm, Utilities {
     User public user1;
     User public user2;
 
-    function assertEq(bool x, bool y) internal {
-        if (x != y) {
-            emit log("Error: Assertion Failed");
-            fail();
-        }
-    }
-
     function _deadline(uint32 extra) internal view returns (uint32) {
         return uint32(block.timestamp) + extra;
     }

@@ -10,13 +10,6 @@ import "./utils/Vm.sol";
 contract RecyclerFuzz is DSTest, Vm, Utilities {
     Recycler public recycler;
 
-    function assertEq(bool x, bool y) internal {
-        if (x != y) {
-            emit log("Error: Assertion Failed");
-            fail();
-        }
-    }
-
     function write_buffer(uint256 amount) public {
         store(address(recycler), bytes32(uint256(6)), bytes32(uint256(amount)));
     }
