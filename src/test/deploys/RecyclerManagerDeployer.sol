@@ -4,6 +4,6 @@ pragma solidity ^0.8.0;
 import "../../interfaces/IRecycler.sol";
 import "../../RecyclerManager.sol";
 
-contract RecyclerManagerDeployed is RecyclerManager {
+contract RecyclerManagerDeployer is RecyclerManager {
     constructor(address token, IRecycler recycler) RecyclerManager(token, recycler) {}
 }
