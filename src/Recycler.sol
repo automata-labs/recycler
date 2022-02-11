@@ -209,6 +209,7 @@ contract Recycler is IRecycler, Lock, Auth, Pause {
     function transfer(address to, uint256 coins)
         external
         noauth
+        playback
         tick(msg.sender)
         returns (bool)
     {
@@ -221,6 +222,7 @@ contract Recycler is IRecycler, Lock, Auth, Pause {
     function transferFrom(address from, address to, uint256 coins)
         external
         noauth
+        playback
         tick(from)
         returns (bool)
     {
@@ -234,6 +236,7 @@ contract Recycler is IRecycler, Lock, Auth, Pause {
     function approve(address spender, uint256 coins)
         external
         noauth
+        playback
         returns (bool)
     {
         _approve(msg.sender, spender, coins);
@@ -253,6 +256,7 @@ contract Recycler is IRecycler, Lock, Auth, Pause {
     )
         external
         noauth
+        playback
     {
         if (deadline < block.timestamp)
             revert DeadlineExpired();
@@ -407,7 +411,7 @@ contract Recycler is IRecycler, Lock, Auth, Pause {
     }
 
     /// @inheritdoc IRecycler
-    function exit(address from, address to, uint256 buffer)
+    function quit(address from, address to, uint256 buffer)
         external
         noauth
         lock
@@ -467,29 +471,7 @@ contract Recycler is IRecycler, Lock, Auth, Pause {
         emit Fill(msg.sender, epoch, epochOf[epoch].amount, shares);
     }
 
-    /// @inheritdoc IRecycler
-    function execute(address[] calldata targets, bytes[] calldata datas)
-        external
-        auth
-        returns (bytes[] memory results)
-    {
-        require(targets.length == datas.length, "Mismatch");
-        results = new bytes[](targets.length);
-
-        for (uint256 i = 0; i < targets.length; i++) {
-            bool success;
-
-            if (targets[i] != address(this)) {
-                (success, results[i]) = targets[i].call(datas[i]);
-            } else if (targets[i] == address(this)) {
-                (success, results[i]) = address(this).delegatecall(datas[i]);
-            }
-
-            if (!success) {
-                revert(Revert.getRevertMsg(results[i]));
-            }
-        }
-    }
+    
 
     /**
      * ERC-20 internal

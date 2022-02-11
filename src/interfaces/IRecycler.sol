@@ -114,21 +114,21 @@ interface IRecycler is IERC20, IERC20Metadata, IERC2612 {
     /// @param coins The amount of tokens to burn, to get the underlying.
     /// @return shares The amount of shares burned.
     function burn(address from, address to, uint256 coins) external returns (uint256 shares);
-    /// @notice Exit the recycler without earning any rewards.
+    /// @notice Quit the recycler without earning any rewards.
     /// @dev Can be used if the epochs never gets filled by a manager/admin.
-    /// @dev The exit function is a 1:1 burning function.
-    /// @param from The address of the account to exit from.
+    /// @dev The quit function is a 1:1 burning function.
+    /// @param from The address of the account to quit from.
     /// @param to The address of the account that receives the tokens.
-    /// @param buffer The amount of tokens to exit with, to get the underlying.
-    function exit(address from, address to, uint256 buffer) external;
+    /// @param buffer The amount of tokens to quit with, to get the underlying.
+    function quit(address from, address to, uint256 buffer) external;
     /// @notice Fill an epoch with shares (iff the previous epoch is already filled).
     /// @param epoch The epoch id to fill.
     /// @return shares The amount of shares for the epoch `epoch`.
     function fill(uint256 epoch) external returns (uint256 shares);
-    /// @notice Execute arbitrary calls.
-    /// @dev Used for e.g. claiming and voting.
-    function execute(
-        address[] calldata targets,
-        bytes[] calldata datas
-    ) external returns (bytes[] memory results);
+    // /// @notice Execute arbitrary calls.
+    // /// @dev Used for e.g. claiming and voting.
+    // function execute(
+    //     address[] calldata targets,
+    //     bytes[] calldata datas
+    // ) external returns (bytes[] memory results);
 }
