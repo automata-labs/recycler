@@ -55,7 +55,7 @@ contract RecyclerTest is DSTest, Vm, Utilities {
     }
 
     function testConstructor() public {
-        assertEq(recycler.name(), "(Re)cycle Staked Tokemak");
+        assertEq(recycler.name(), "(Re)cycler Staked Tokemak");
         assertEq(recycler.symbol(), "(re)tTOKE");
         assertEq(recycler.decimals(), 18);
         assertEq(recycler.dust(), 0);

@@ -13,7 +13,7 @@ library Buffer {
         Buffer.Data memory self,
         mapping(uint256 => Epoch.Data) storage epochs
     ) internal view returns (uint256) {
-        if (epochs[self.epoch].amount > 0 && epochs[self.epoch].filled) {
+        if (epochs[self.epoch].filled) {
             return 0;
         } else {
             return self.amount;
@@ -25,7 +25,7 @@ library Buffer {
         mapping(uint256 => Epoch.Data) storage epochs
     ) internal view returns (uint256) {
         if (epochs[self.epoch].amount > 0 && epochs[self.epoch].filled) {
-            return self.amount * epochs[self.epoch].shares / epochs[self.epoch].amount;
+            return (self.amount * epochs[self.epoch].shares) / epochs[self.epoch].amount;
         } else {
             return 0;
         }
