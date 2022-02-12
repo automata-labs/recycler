@@ -5,6 +5,7 @@ import "ds-test/test.sol";
 import "yield-utils-v2/token/IERC20.sol";
 
 import "../../interfaces/external/IOnChainVoteL1.sol";
+import "../../interfaces/external/IRewards.sol";
 import "../mocks/Rewards.sol";
 import "../mocks/RewardsHash.sol";
 import "../mocks/TokeVotePool.sol";
@@ -33,7 +34,7 @@ contract Utilities is DSTest, Vm {
     }
 
     function realloc_buffer(address recycler, uint256 amount) public {
-        store(recycler, bytes32(uint256(7)), bytes32(uint256(amount)));
+        store(recycler, bytes32(uint256(10)), bytes32(uint256(amount)));
     }
 
     function realloc_epoch(
@@ -51,7 +52,7 @@ contract Utilities is DSTest, Vm {
         word += amount << 32;
         word += deadline << 0;
 
-        store(recycler, keccak256(abi.encode(epoch, 9)), bytes32(uint256(word)));
+        store(recycler, keccak256(abi.encode(epoch, 13)), bytes32(uint256(word)));
     }
 
     function assertEq(bool x, bool y) internal {
@@ -67,8 +68,8 @@ contract Utilities is DSTest, Vm {
         address wallet,
         uint256 amount,
         uint256 privateKey
-    ) public returns (Recipient memory recipient, uint8 v, bytes32 r, bytes32 s) {
-        recipient = Recipient({
+    ) public returns (IRewards.Recipient memory recipient, uint8 v, bytes32 r, bytes32 s) {
+        recipient = IRewards.Recipient({
             chainId: chainId,
             cycle: cycle,
             wallet: wallet,

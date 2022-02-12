@@ -18,7 +18,13 @@ contract RecyclerManagerTest is DSTest, Utilities {
     User public user1;
 
     function setUp() public {
-        recycler = new Recycler(address(tokeVotePool), 0);
+        recycler = new Recycler(
+            address(toke),
+            address(tokeVotePool),
+            address(onchainvote),
+            address(rewards),
+            0
+        );
         recyclerManager = new RecyclerManager(address(tokeVotePool), IRecycler(recycler));
 
         user0 = new User();
