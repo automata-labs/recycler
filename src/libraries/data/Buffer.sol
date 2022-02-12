@@ -30,8 +30,4 @@ library Buffer {
             return 0;
         }
     }
-
-    function isEmpty(Buffer.Data memory self) internal pure returns (bool) {
-        return (self.epoch == 0 && self.amount == 0);
-    }
 }
