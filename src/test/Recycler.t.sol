@@ -27,11 +27,6 @@ contract User is Vm, Utilities {
     }
 }
 
-library KeyPair {
-    address public constant publicKey = 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266;
-    uint256 public constant privateKey = 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80;
-}
-
 contract RecyclerTest is DSTest, Vm, Utilities {
     Recycler public recycler;
     RecyclerManager public manager;
@@ -140,7 +135,7 @@ contract RecyclerTest is DSTest, Vm, Utilities {
     // should rollover from epoch 1 to epoch 2
     // (because epoch 0 has no real rollover to epoch 1)
     function testRollover() public {
-        realloc_reward_signer(KeyPair.publicKey);
+        realloc_reward_signer(keyPair.publicKey);
         // before - create epoch 1
         assertEq(recycler.cursor(), 0);
         recycler.next(uint32(block.timestamp));
@@ -148,7 +143,7 @@ contract RecyclerTest is DSTest, Vm, Utilities {
         // rollover
         recycler.prepare(1e18);
         (IRewards.Recipient memory recipient, uint8 v, bytes32 r, bytes32 s) =
-            buildRecipient(1, 181, address(recycler), 1e18, KeyPair.privateKey);
+            buildRecipient(1, 181, address(recycler), 1e18, keyPair.privateKey);
         recycler.rollover(recipient, v, r, s, 1, uint32(block.timestamp + 100));
 
         // after
@@ -164,7 +159,7 @@ contract RecyclerTest is DSTest, Vm, Utilities {
      */
 
     function testCycle() public {
-        realloc_reward_signer(KeyPair.publicKey);
+        realloc_reward_signer(keyPair.publicKey);
 
         IRewards.Recipient memory recipient;
         uint8 v;
@@ -174,18 +169,18 @@ contract RecyclerTest is DSTest, Vm, Utilities {
         recycler.prepare(type(uint256).max);
 
         // compound once
-        (recipient, v, r, s) = buildRecipient(1, 181, address(recycler), 1e18, KeyPair.privateKey);
+        (recipient, v, r, s) = buildRecipient(1, 181, address(recycler), 1e18, keyPair.privateKey);
         recycler.cycle(recipient, v, r, s);
         assertEq(tokeVotePool.balanceOf(address(recycler)), 1e18);
 
         // compound one more time
-        (recipient, v, r, s) = buildRecipient(1, 181, address(recycler), 3e18, KeyPair.privateKey);
+        (recipient, v, r, s) = buildRecipient(1, 181, address(recycler), 3e18, keyPair.privateKey);
         recycler.cycle(recipient, v, r, s);
         assertEq(tokeVotePool.balanceOf(address(recycler)), 3e18);
     }
 
     function testCycleWithFee() public {
-        realloc_reward_signer(KeyPair.publicKey);
+        realloc_reward_signer(keyPair.publicKey);
         recycler.setMaintainer(address(user0));
         recycler.setFee(100);
 
@@ -197,14 +192,14 @@ contract RecyclerTest is DSTest, Vm, Utilities {
         recycler.prepare(type(uint256).max);
 
         // compound once
-        (recipient, v, r, s) = buildRecipient(1, 181, address(recycler), 1e18, KeyPair.privateKey);
+        (recipient, v, r, s) = buildRecipient(1, 181, address(recycler), 1e18, keyPair.privateKey);
         recycler.cycle(recipient, v, r, s);
         assertEq(tokeVotePool.balanceOf(address(recycler)), 9e17 + 9e16);
         // check maintainer got the fee
         assertEq(toke.balanceOf(address(user0)), 1e16);
 
         // compound one more time
-        (recipient, v, r, s) = buildRecipient(1, 181, address(recycler), 3e18, KeyPair.privateKey);
+        (recipient, v, r, s) = buildRecipient(1, 181, address(recycler), 3e18, keyPair.privateKey);
         recycler.cycle(recipient, v, r, s);
         assertEq(tokeVotePool.balanceOf(address(recycler)), 2e18 + 9e17 + 7e16);
         // check maintainer got the fee
@@ -216,10 +211,10 @@ contract RecyclerTest is DSTest, Vm, Utilities {
      */
 
     function testClaim() public {
-        realloc_reward_signer(KeyPair.publicKey);
+        realloc_reward_signer(keyPair.publicKey);
 
         (IRewards.Recipient memory recipient, uint8 v, bytes32 r, bytes32 s) =
-            buildRecipient(1, 181, address(recycler), 1e18, KeyPair.privateKey);
+            buildRecipient(1, 181, address(recycler), 1e18, keyPair.privateKey);
 
         assertEq(toke.balanceOf(address(recycler)), 0);
         recycler.claim(recipient, v, r, s);
@@ -227,7 +222,7 @@ contract RecyclerTest is DSTest, Vm, Utilities {
     }
 
     function testClaimTwice() public {
-        realloc_reward_signer(KeyPair.publicKey);
+        realloc_reward_signer(keyPair.publicKey);
 
         IRewards.Recipient memory recipient;
         uint8 v;
@@ -235,11 +230,11 @@ contract RecyclerTest is DSTest, Vm, Utilities {
         bytes32 s;
 
         // claim again, w/ 1e18
-        (recipient, v, r, s) = buildRecipient(1, 181, address(recycler), 1e18, KeyPair.privateKey);
+        (recipient, v, r, s) = buildRecipient(1, 181, address(recycler), 1e18, keyPair.privateKey);
         recycler.claim(recipient, v, r, s);
 
         // claim again, w/ 3e18
-        (recipient, v, r, s) = buildRecipient(1, 181, address(recycler), 3e18, KeyPair.privateKey);
+        (recipient, v, r, s) = buildRecipient(1, 181, address(recycler), 3e18, keyPair.privateKey);
         recycler.claim(recipient, v, r, s);
 
         // NOTE: the claimable amount is cumulative, so final amount should be 3e18
@@ -247,12 +242,12 @@ contract RecyclerTest is DSTest, Vm, Utilities {
     }
 
     function testClaimWithFee() public {
-        realloc_reward_signer(KeyPair.publicKey);
+        realloc_reward_signer(keyPair.publicKey);
         recycler.setFee(1000); // 10%
         recycler.setMaintainer(address(user0));
 
         (IRewards.Recipient memory recipient, uint8 v, bytes32 r, bytes32 s) =
-            buildRecipient(1, 181, address(recycler), 1e18, KeyPair.privateKey);
+            buildRecipient(1, 181, address(recycler), 1e18, keyPair.privateKey);
 
         assertEq(toke.balanceOf(address(recycler)), 0);
         recycler.claim(recipient, v, r, s);
@@ -335,6 +330,13 @@ contract RecyclerTest is DSTest, Vm, Utilities {
     /**
      * `next`
      */
+
+    function testNextFuzz(uint32 deadline) public {
+        uint256 cursor = recycler.cursor();
+        recycler.next(deadline);
+        assertEq(recycler.cursor(), cursor + 1);
+        assertEq(recycler.epochAs(cursor + 1).deadline, deadline);
+    }
 
     function testNext() public {
         uint32 deadline = uint32(block.timestamp + 1);
@@ -605,6 +607,18 @@ contract RecyclerTest is DSTest, Vm, Utilities {
     /**
      * `fill`
      */
+
+    function testFillFuzz(uint32 deadline, uint104 amount) public {
+        uint256 epoch = recycler.next(1);
+
+        realloc_ttoke(address(recycler), amount);
+        realloc_buffer(address(recycler), amount);
+        assertEq(recycler.totalBuffer(), amount);
+
+        realloc_epoch(address(recycler), epoch, deadline, amount, 0, false);
+        recycler.fill(epoch);
+        assertEq(recycler.epochAs(epoch).filled, true);
+    }
 
     // fills normally, without any excessive coins.
     // this means that coins <=> shares in this unit test.

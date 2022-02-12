@@ -13,6 +13,16 @@ import "../mocks/TokeVotePool.sol";
 import "../utils/Vm.sol";
 
 contract Utilities is DSTest, Vm {
+    struct KeyPair {
+        address publicKey;
+        uint256 privateKey;
+    }
+
+    KeyPair public keyPair = KeyPair({
+        publicKey: 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266,
+        privateKey: 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
+    });
+
     IOnChainVoteL1 public onchainvote = IOnChainVoteL1(0x43094eD6D6d214e43C31C38dA91231D2296Ca511);
     Rewards public rewards = Rewards(0x79dD22579112d8a5F7347c5ED7E609e60da713C5);
     RewardsHash public rewardsHash = RewardsHash(0x5ec3EC6A8aC774c7d53665ebc5DDf89145d02fB6);
@@ -53,6 +63,11 @@ contract Utilities is DSTest, Vm {
         word += deadline << 0;
 
         store(recycler, keccak256(abi.encode(epoch, 13)), bytes32(uint256(word)));
+    }
+
+    function realloc_shares(address recycler, uint256 totalCoins, uint256 totalShares) public {
+        realloc_ttoke(recycler, totalCoins);
+        store(recycler, bytes32(uint256(9)), bytes32(uint256(totalShares)));
     }
 
     function assertEq(bool x, bool y) internal {

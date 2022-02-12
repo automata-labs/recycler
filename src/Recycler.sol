@@ -280,7 +280,7 @@ contract Recycler is IRecycler, Lock, Auth, Pause {
         returns (bool)
     {
         _decreaseAllowance(from, coins);
-        _transfer(msg.sender, to, coins);
+        _transfer(from, to, coins);
 
         return true;
     }
