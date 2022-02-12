@@ -19,7 +19,7 @@ library Epoch {
         uint256 totalCoins
     ) internal pure returns (uint256) {
         if (totalShares > 0 && totalCoins > 0) {
-            return self.amount * totalShares / totalCoins;
+            return (self.amount * totalShares) / totalCoins;
         } else {
             return self.amount;
         }

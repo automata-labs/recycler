@@ -127,6 +127,9 @@ contract Recycler is IRecycler, Lock, Auth, Pause {
     }
 
     constructor(address coin_, uint256 dust_) {
+        if (coin_ == address(0))
+            revert ParameterZero();
+
         coin = coin_;
         dust = dust_;
 
@@ -151,7 +154,7 @@ contract Recycler is IRecycler, Lock, Auth, Pause {
 
     /// @inheritdoc IERC20Metadata
     function name() public pure returns (string memory) {
-        return "(Re)cycle Staked Tokemak";
+        return "(Re)cycler Staked Tokemak";
     }
 
     /// @inheritdoc IERC20Metadata
@@ -279,7 +282,7 @@ contract Recycler is IRecycler, Lock, Auth, Pause {
     }
 
     /**
-     * Previews
+     * View
      */
 
     /// @inheritdoc IRecycler
@@ -292,7 +295,7 @@ contract Recycler is IRecycler, Lock, Auth, Pause {
     }
 
     /**
-     * Actions
+     * Setters
      */
 
     /// @inheritdoc IRecycler
@@ -325,16 +328,9 @@ contract Recycler is IRecycler, Lock, Auth, Pause {
         emit SetDeadline(epoch, deadline);
     }
 
-    /// @inheritdoc IRecycler
-    function next(uint32 deadline)
-        external
-        auth
-        lock
-        returns (uint256 id)
-    {
-        epochOf[(id = ++cursor)].deadline = deadline;
-        emit Next(msg.sender, id, deadline);
-    }
+    /**
+     * Actions
+     */
 
     /// @inheritdoc IRecycler
     function poke(address account)
@@ -362,11 +358,14 @@ contract Recycler is IRecycler, Lock, Auth, Pause {
         if (balance + buffer > capacity)
             revert OverflowCapacity();
 
-        if (epochOf[cursor].filled || epochOf[cursor].deadline < _blockTimestamp())
-            revert EpochExpired();
-
+        // if a past buffer exists that didn't get cleared by tick, the revert
+        // cannot store to queued deposits at once
         if (bufferOf[to].amount > 0 && bufferOf[to].epoch != cursor)
             revert BufferExists();
+
+        // check that current epoch is depositable
+        if (epochOf[cursor].filled || epochOf[cursor].deadline < _blockTimestamp())
+            revert EpochExpired();
 
         // pull coins
         ICallback(msg.sender).mintCallback(data);
@@ -429,6 +428,21 @@ contract Recycler is IRecycler, Lock, Auth, Pause {
 
         emit Transfer(from, address(0), buffer);
         emit Exit(msg.sender, from, to, buffer);
+    }
+
+    /**
+     * Maintainance
+     */
+
+    /// @inheritdoc IRecycler
+    function next(uint32 deadline)
+        external
+        auth
+        lock
+        returns (uint256 id)
+    {
+        epochOf[(id = ++cursor)].deadline = deadline;
+        emit Next(msg.sender, id, deadline);
     }
 
     /// @inheritdoc IRecycler
@@ -530,6 +544,8 @@ contract Recycler is IRecycler, Lock, Auth, Pause {
         if (buffer.epoch > 0 && epochOf[buffer.epoch].filled) {
             shares = buffer.toShares(epochOf);
 
+            // either first-ever deposit or full-slash
+            // if that's the case, fallback to 1:1
             if (shares == 0)
                 shares = buffer.amount;
 

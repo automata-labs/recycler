@@ -10,7 +10,7 @@ library Share {
         uint256 totalShares
     ) internal pure returns (uint256) {
         if (totalShares > 0) {
-            return shares * totalCoins / totalShares;
+            return (shares * totalCoins) / totalShares;
         } else {
             return 0;
         }
