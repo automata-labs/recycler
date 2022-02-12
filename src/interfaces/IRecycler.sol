@@ -7,10 +7,19 @@ import "yield-utils-v2/token/IERC2612.sol";
 
 import "../libraries/data/Buffer.sol";
 import "../libraries/data/Epoch.sol";
+import "./external/IOnChainVoteL1.sol";
+import "./external/IRewards.sol";
 
 interface IRecycler is IERC20, IERC20Metadata, IERC2612 {
+    /// @notice The Tokemak token.
+    function underlying() external view returns (address);
     /// @notice The staked Tokemak token.
-    function coin() external view returns (address);
+    function derivative() external view returns (address);
+    /// @notice The Tokemak voting contract.
+    function onchainvote() external view returns (address);
+    /// @notice The Tokemak rewards contract.
+    function rewards() external view returns (address);
+
     /// @notice The minimum amount of tokens that needs to be deposited.
     function dust() external view returns (uint256);
     /// @notice The max capacity of the vault (in `coin`).
@@ -52,6 +61,8 @@ interface IRecycler is IERC20, IERC20Metadata, IERC2612 {
     /// @param owner The address to check the nonce value of.
     /// @return The next nonce value.
     function nonces(address owner) external view returns (uint256);
+    /// @notice The mapping of valid reactor keys that the vault can vote with.
+    function keys(bytes32 key) external view returns (bool);
 
     /// @notice The permit typehash used for `permit`.
     function PERMIT_TYPEHASH() external view returns (bytes32);
@@ -90,11 +101,7 @@ interface IRecycler is IERC20, IERC20Metadata, IERC2612 {
     /// @param epoch The epoch id.
     /// @param deadline The deadline in unix timestamp.
     function setDeadline(uint256 epoch, uint32 deadline) external;
-    /// @notice Fast-forward to next epoch.
-    /// @dev A new epoch can be created without the previous being filled.
-    /// @param deadline The deadline in unix timestamp.
-    /// @return id The epoch id of the created epoch.
-    function next(uint32 deadline) external returns (uint256 id);
+
     /// @notice Converts an account's buffer into shares if the buffer's epoch has been filled -
     /// otherwise the function does nothing.
     /// @dev The poke function should never revert. If no shares was created, then it'll return zero.
@@ -114,21 +121,58 @@ interface IRecycler is IERC20, IERC20Metadata, IERC2612 {
     /// @param coins The amount of tokens to burn, to get the underlying.
     /// @return shares The amount of shares burned.
     function burn(address from, address to, uint256 coins) external returns (uint256 shares);
-    /// @notice Exit the recycler without earning any rewards.
+    /// @notice Quit the recycler without earning any rewards.
     /// @dev Can be used if the epochs never gets filled by a manager/admin.
-    /// @dev The exit function is a 1:1 burning function.
-    /// @param from The address of the account to exit from.
+    /// @dev The quit function is a 1:1 burning function.
+    /// @param from The address of the account to quit from.
     /// @param to The address of the account that receives the tokens.
-    /// @param buffer The amount of tokens to exit with, to get the underlying.
-    function exit(address from, address to, uint256 buffer) external;
+    /// @param buffer The amount of tokens to quit with, to get the underlying.
+    function quit(address from, address to, uint256 buffer) external;
+
+    /// @notice Claims TOKE, deposits TOKE for tTOKE, fills an `epoch` and creates an new epoch with
+    /// the a `deadline` - all in one transaction.
+    /// @dev A convenience function for the admin.
+    function rollover(
+        IRewards.Recipient memory recipient,
+        uint8 v,
+        bytes32 r,
+        bytes32 s,
+        uint256 epoch,
+        uint32 deadline
+    ) external;
+    /// @notice Claims- and stakes the token rewards to compound the assets.
+    function cycle(IRewards.Recipient memory recipient, uint8 v, bytes32 r, bytes32 s) external;
+    /// @notice Deposit TOKE for Recycler.
+    function claim(
+        IRewards.Recipient memory recipient,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    ) external;
+    /// @notice Deposit TOKE for tTOKE for the Recycler.
+    function stake(uint256 amount) external;
+    /// @notice Approves the tTOKE to pull TOKE tokens from this contract.
+    /// @dev This is required because the tTOKE contract pulls fund using allowance to stake TOKE.
+    /// If not called before e.g. `deposit`, `compound` or `posteriori`, then the call will revert.
+    function prepare(uint256 amount) external;
+    /// @notice Vote on Tokemak reactors using the Recycler.
+    /// @dev Each reactor key will be checked against a mapping to see if it's valid.
+    function vote(IOnChainVoteL1.UserVotePayload calldata data) external;
+    /// @notice Fast-forward to next epoch.
+    /// @dev A new epoch can be created without the previous being filled.
+    /// @param deadline The deadline in unix timestamp.
+    /// @return id The epoch id of the created epoch.
+    function next(uint32 deadline) external returns (uint256 id);
     /// @notice Fill an epoch with shares (iff the previous epoch is already filled).
     /// @param epoch The epoch id to fill.
     /// @return shares The amount of shares for the epoch `epoch`.
     function fill(uint256 epoch) external returns (uint256 shares);
+
     /// @notice Execute arbitrary calls.
     /// @dev Used for e.g. claiming and voting.
     function execute(
         address[] calldata targets,
+        uint256[] calldata values,
         bytes[] calldata datas
     ) external returns (bytes[] memory results);
 }

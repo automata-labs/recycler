@@ -3,9 +3,14 @@ pragma solidity ^0.8.0;
 
 import "yield-utils-v2/token/IERC20.sol";
 
-import "../../libraries/external/Tokemak.sol";
-
 interface IRewards {
+    struct Recipient {
+        uint256 chainId;
+        uint256 cycle;
+        address wallet;
+        uint256 amount;
+    }
+
     struct EIP712Domain {
         string name;
         string version;

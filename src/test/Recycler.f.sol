@@ -11,7 +11,13 @@ contract RecyclerFuzz is DSTest, Vm, Utilities {
     Recycler public recycler;
 
     function setUp() public {
-        recycler = new Recycler(address(tokeVotePool), 0);
+        recycler = new Recycler(
+            address(toke),
+            address(tokeVotePool),
+            address(onchainvote),
+            address(rewards),
+            0
+        );
     }
 
     function testNextFuzz(uint32 deadline) public {

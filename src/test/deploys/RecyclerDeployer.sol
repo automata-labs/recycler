@@ -4,5 +4,17 @@ pragma solidity ^0.8.0;
 import "../../Recycler.sol";
 
 contract RecyclerDeployer is Recycler {
-    constructor(address token, uint256 dust) Recycler(token, dust) {}
+    constructor(
+        address underlying,
+        address derivative,
+        address onchainvote,
+        address rewards,
+        uint256 dust
+    ) Recycler(
+        underlying,
+        derivative,
+        onchainvote,
+        rewards,
+        dust
+    ) {}
 }

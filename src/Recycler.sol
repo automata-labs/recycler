@@ -5,6 +5,9 @@ import "yield-utils-v2/token/IERC20.sol";
 import "yield-utils-v2/token/IERC20Metadata.sol";
 import "yield-utils-v2/token/IERC2612.sol";
 
+import "./interfaces/external/IOnChainVoteL1.sol";
+import "./interfaces/external/IRewards.sol";
+import "./interfaces/external/ITokeVotePool.sol";
 import "./interfaces/ICallback.sol";
 import "./interfaces/IRecycler.sol";
 import "./libraries/data/Buffer.sol";
@@ -27,15 +30,23 @@ contract Recycler is IRecycler, Lock, Auth, Pause {
     using SafeTransfer for address;
     using Share for uint256;
 
-    /// @notice Emitted when dust is set.
-    /// @param dust The set dust value.
-    event SetDust(uint256 dust);
     /// @notice Emitted when capacity is set.
     /// @param capacity The set capacity value.
     event SetCapacity(uint256 capacity);
     /// @notice Emitted when a new deadline is set for an epoch
     /// @param epoch The set capacity value.
     event SetDeadline(uint256 epoch, uint32 deadline);
+    /// @notice Emitted when dust is set.
+    /// @param dust The set dust value.
+    event SetDust(uint256 dust);
+    /// @notice Emitted when a reactor key is set.
+    /// @param key The reactor key.
+    /// @param value The value of the reactor key.
+    event SetKey(bytes32 key, bool value);
+    /// @notice Emitted when name is set.
+    /// @dev Not emitted in constructor/deployment.
+    /// @param name The set dust value.
+    event SetName(string name);
     /// @notice Emitted when creating a new epoch.
     /// @param sender The `msg.sender`.
     /// @param cursor The epoch id of the created epoch.
@@ -77,10 +88,16 @@ contract Recycler is IRecycler, Lock, Auth, Pause {
     error InsufficientTransfer();
     /// @notice Throws when conversion to shares gives zero.
     error InsufficientExchange();
+    /// @notice Throws when the deadline is invalid (0).
+    error InvalidDeadline();
     /// @notice Throws when the epoch parameters is invalid (0).
     error InvalidEpoch();
+    /// @notice Throws when the fee is set over 100%.
+    error InvalidFee();
     /// @notice Throws when the permit signature is invalid.
     error InvalidSignature();
+    /// @notice Throws when trying to sweep an valid token.
+    error InvalidToken();
     /// @notice Throws when the max capacity is exceeded.
     error OverflowCapacity();
     /// @notice Throws when an amount parameter is less than dust.
@@ -90,14 +107,32 @@ contract Recycler is IRecycler, Lock, Auth, Pause {
     /// @notice Throws when the selector is not matchable.
     error UndefinedSelector();
 
+    /// @notice The max fee that can be set.
+    uint256 internal constant MAX_FEE = 1e4;
+    /// @notice The internal name variable.
+    /// @dev Can be changed.
+    string internal _name;
+
     /// @inheritdoc IRecycler
-    address public immutable coin;
+    address public immutable underlying;
+    /// @inheritdoc IRecycler
+    address public immutable derivative;
+    /// @inheritdoc IRecycler
+    address public immutable onchainvote;
+    /// @inheritdoc IRecycler
+    address public immutable rewards;
+
     /// @inheritdoc IRecycler
     uint256 public dust;
     /// @inheritdoc IRecycler
     uint256 public capacity;
     /// @inheritdoc IRecycler
     uint256 public cursor;
+    /// @notice The maintainer of the vault.
+    /// @dev Receives the fee when calling `claim`, if non-zero.
+    address public maintainer;
+    /// @notice The fee
+    uint256 public fee;
 
     /// @inheritdoc IRecycler
     uint256 public totalShares;
@@ -113,6 +148,8 @@ contract Recycler is IRecycler, Lock, Auth, Pause {
     mapping(address => mapping(address => uint256)) public allowance;
     /// @inheritdoc IRecycler
     mapping(address => uint256) public nonces;
+    /// @inheritdoc IRecycler
+    mapping(bytes32 => bool) public keys;
 
     /// @notice The initial chain id set at deployment.
     uint256 private immutable INITIAL_CHAIN_ID;
@@ -126,13 +163,29 @@ contract Recycler is IRecycler, Lock, Auth, Pause {
         _;
     }
 
-    constructor(address coin_, uint256 dust_) {
-        if (coin_ == address(0))
+    constructor(
+        address underlying_,
+        address derivative_,
+        address onchainvote_,
+        address rewards_,
+        uint256 dust_
+    ) {
+        if (
+            derivative_ == address(0) ||
+            underlying_ == address(0) ||
+            onchainvote_ == address(0) ||
+            rewards_ == address(0)
+        ) {
             revert ParameterZero();
+        }
 
-        coin = coin_;
+        underlying = underlying_;
+        derivative = derivative_;
+        onchainvote = onchainvote_;
+        rewards = rewards_;
         dust = dust_;
 
+        _name = "(Re)cycler Staked Tokemak";
         capacity = type(uint256).max;
         epochOf[0].filled = true;
 
@@ -153,8 +206,8 @@ contract Recycler is IRecycler, Lock, Auth, Pause {
     }
 
     /// @inheritdoc IERC20Metadata
-    function name() public pure returns (string memory) {
-        return "(Re)cycler Staked Tokemak";
+    function name() public view returns (string memory) {
+        return _name;
     }
 
     /// @inheritdoc IERC20Metadata
@@ -175,12 +228,12 @@ contract Recycler is IRecycler, Lock, Auth, Pause {
     /// @inheritdoc IERC20
     /// @dev Returns the total amount of active- and buffering coins.
     function totalSupply() external view returns (uint256) {
-        return IERC20(coin).balanceOf(address(this));
+        return IERC20(derivative).balanceOf(address(this));
     }
 
     /// @inheritdoc IRecycler
     function totalCoins() public view returns (uint256) {
-        return IERC20(coin).balanceOf(address(this)) - totalBuffer;
+        return IERC20(derivative).balanceOf(address(this)) - totalBuffer;
     }
 
     /// @inheritdoc IERC20
@@ -209,6 +262,7 @@ contract Recycler is IRecycler, Lock, Auth, Pause {
     function transfer(address to, uint256 coins)
         external
         noauth
+        playback
         tick(msg.sender)
         returns (bool)
     {
@@ -221,6 +275,7 @@ contract Recycler is IRecycler, Lock, Auth, Pause {
     function transferFrom(address from, address to, uint256 coins)
         external
         noauth
+        playback
         tick(from)
         returns (bool)
     {
@@ -234,6 +289,7 @@ contract Recycler is IRecycler, Lock, Auth, Pause {
     function approve(address spender, uint256 coins)
         external
         noauth
+        playback
         returns (bool)
     {
         _approve(msg.sender, spender, coins);
@@ -253,6 +309,7 @@ contract Recycler is IRecycler, Lock, Auth, Pause {
     )
         external
         noauth
+        playback
     {
         if (deadline < block.timestamp)
             revert DeadlineExpired();
@@ -298,6 +355,31 @@ contract Recycler is IRecycler, Lock, Auth, Pause {
      * Setters
      */
 
+    function setName(string memory name_)
+        external
+        auth
+    {
+        _name = name_;
+        emit SetName(_name);
+    }
+
+    function setMaintainer(address maintainer_)
+        external
+        auth
+    {
+        maintainer = maintainer_;
+    }
+
+    function setFee(uint256 fee_)
+        external
+        auth
+    {
+        if (fee_ > MAX_FEE)
+            revert InvalidFee();
+
+        fee = fee_;
+    }
+
     /// @inheritdoc IRecycler
     function setDust(uint256 dust_)
         external
@@ -314,6 +396,13 @@ contract Recycler is IRecycler, Lock, Auth, Pause {
     {
         capacity = capacity_;
         emit SetCapacity(dust);
+    }
+
+    function setKey(bytes32 key, bool value)
+        external
+        auth
+    {
+        keys[key] = value;
     }
 
     /// @inheritdoc IRecycler
@@ -353,7 +442,7 @@ contract Recycler is IRecycler, Lock, Auth, Pause {
         if (buffer == 0 || buffer < dust)
             revert ParameterDust();
 
-        uint256 balance = _balance(coin);
+        uint256 balance = _balance(derivative);
 
         if (balance + buffer > capacity)
             revert OverflowCapacity();
@@ -400,14 +489,14 @@ contract Recycler is IRecycler, Lock, Auth, Pause {
 
         totalShares -= shares;
         sharesOf[from] -= shares;
-        coin.safeTransfer(to, coins);
+        derivative.safeTransfer(to, coins);
 
         emit Transfer(from, address(0), coins);
         emit Burn(msg.sender, from, to, coins);
     }
 
     /// @inheritdoc IRecycler
-    function exit(address from, address to, uint256 buffer)
+    function quit(address from, address to, uint256 buffer)
         external
         noauth
         lock
@@ -424,7 +513,7 @@ contract Recycler is IRecycler, Lock, Auth, Pause {
         if (bufferOf[from].amount == 0)
             delete bufferOf[from];
 
-        coin.safeTransfer(to, buffer);
+        derivative.safeTransfer(to, buffer);
 
         emit Transfer(from, address(0), buffer);
         emit Exit(msg.sender, from, to, buffer);
@@ -435,8 +524,86 @@ contract Recycler is IRecycler, Lock, Auth, Pause {
      */
 
     /// @inheritdoc IRecycler
-    function next(uint32 deadline)
+    function rollover(
+        IRewards.Recipient memory recipient,
+        uint8 v,
+        bytes32 r,
+        bytes32 s,
+        uint256 epoch,
+        uint32 deadline
+    )
         external
+        auth
+    {
+        if (epoch == 0)
+            revert InvalidEpoch();
+
+        if (deadline == 0)
+            revert InvalidDeadline();
+
+        cycle(recipient, v, r, s);
+        fill(epoch);
+        next(deadline);
+    }
+
+    /// @inheritdoc IRecycler
+    function cycle(IRewards.Recipient memory recipient, uint8 v, bytes32 r, bytes32 s)
+        public
+        auth
+    {
+        claim(recipient, v, r, s);
+        stake(_balance(underlying));
+    }
+
+    /// @inheritdoc IRecycler
+    function claim(IRewards.Recipient memory recipient, uint8 v, bytes32 r, bytes32 s)
+        public
+        auth
+    {
+        uint256 claimed = IRewards(rewards).getClaimableAmount(IRewards.Recipient({
+            chainId: recipient.chainId,
+            cycle: recipient.cycle,
+            wallet: recipient.wallet,
+            amount: recipient.amount
+        }));
+        uint256 fees;
+        
+        IRewards(rewards).claim(recipient, v, r, s);
+
+        if (fee > 0 && maintainer != address(0)) {
+            fees = (claimed * fee) / MAX_FEE;
+            claimed -= fees;
+            IERC20(underlying).transfer(maintainer, fees);
+        }
+    }
+
+    /// @inheritdoc IRecycler
+    function stake(uint256 amount)
+        public
+        auth
+    {
+        ITokeVotePool(derivative).deposit(amount);
+    }
+
+    /// @inheritdoc IRecycler
+    function prepare(uint256 amount)
+        external
+        auth
+    {
+        IERC20(underlying).approve(derivative, amount);
+    }
+
+    /// @inheritdoc IRecycler
+    function vote(IOnChainVoteL1.UserVotePayload calldata data)
+        external
+        auth
+    {
+        IOnChainVoteL1(onchainvote).vote(data);
+    }
+
+    /// @inheritdoc IRecycler
+    function next(uint32 deadline)
+        public
         auth
         lock
         returns (uint256 id)
@@ -447,7 +614,7 @@ contract Recycler is IRecycler, Lock, Auth, Pause {
 
     /// @inheritdoc IRecycler
     function fill(uint256 epoch)
-        external
+        public
         auth
         lock
         returns (uint256 shares)
@@ -467,20 +634,56 @@ contract Recycler is IRecycler, Lock, Auth, Pause {
         emit Fill(msg.sender, epoch, epochOf[epoch].amount, shares);
     }
 
+    /**
+     * Miscellaneous
+     */
+
+    /// @notice Sweep ERC20 tokens from this contract.
+    function sweep(address token, address to)
+        external
+        lock
+        auth
+    {
+        if (token == derivative)
+            revert InvalidToken();
+
+        if (to == address(0))
+            revert ParameterZero();
+
+        token.safeTransfer(to, _balance(token));
+    }
+
+    /// @notice Sweep ETH from this contract.
+    function sweeth(address payable to)
+        external
+        payable
+        lock
+        auth
+    {
+        (bool success, ) = to.call{value: msg.value}("");
+        require(success, "Failed to sweep ETH.");
+    }
+
+    /**
+     * Upgradeability
+     */
+
     /// @inheritdoc IRecycler
-    function execute(address[] calldata targets, bytes[] calldata datas)
+    function execute(address[] calldata targets, uint256[] calldata values, bytes[] calldata datas)
         external
         auth
         returns (bytes[] memory results)
     {
         require(targets.length == datas.length, "Mismatch");
+        require(targets.length == values.length, "Mismatch");
         results = new bytes[](targets.length);
 
-        for (uint256 i = 0; i < targets.length; i++) {
+        uint256 length = targets.length;
+        for (uint256 i = 0; i < length; i++) {
             bool success;
 
             if (targets[i] != address(this)) {
-                (success, results[i]) = targets[i].call(datas[i]);
+                (success, results[i]) = targets[i].call{value: values[i]}(datas[i]);
             } else if (targets[i] == address(this)) {
                 (success, results[i]) = address(this).delegatecall(datas[i]);
             }
@@ -557,13 +760,13 @@ contract Recycler is IRecycler, Lock, Auth, Pause {
     /// @notice Verify that funds has been pulled.
     /// @dev Used in conjunction with callbacks.
     function _verify(uint256 expected) internal view {
-        if (_balance(coin) < expected)
+        if (_balance(derivative) < expected)
             revert InsufficientTransfer();
     }
 
     /// @notice The balance of a token for this contract.
-    function _balance(address token_) internal view returns (uint256 balance) {
-        (bool success, bytes memory returndata) = token_.staticcall(
+    function _balance(address token) internal view returns (uint256 balance) {
+        (bool success, bytes memory returndata) = token.staticcall(
             abi.encodeWithSelector(IERC20.balanceOf.selector, address(this))
         );
         require(success && returndata.length >= 32);

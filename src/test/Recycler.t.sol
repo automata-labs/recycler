@@ -3,6 +3,7 @@ pragma solidity ^0.8.0;
 
 import "ds-test/test.sol";
 
+import "../interfaces/external/IOnChainVoteL1.sol";
 import "../interfaces/IRecycler.sol";
 import "../libraries/SafeTransfer.sol";
 import "../Recycler.sol";
@@ -26,6 +27,11 @@ contract User is Vm, Utilities {
     }
 }
 
+library KeyPair {
+    address public constant publicKey = 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266;
+    uint256 public constant privateKey = 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80;
+}
+
 contract RecyclerTest is DSTest, Vm, Utilities {
     Recycler public recycler;
     RecyclerManager public manager;
@@ -39,7 +45,13 @@ contract RecyclerTest is DSTest, Vm, Utilities {
     }
 
     function setUp() public {
-        recycler = new Recycler(address(tokeVotePool), 0);
+        recycler = new Recycler(
+            address(toke),
+            address(tokeVotePool),
+            address(onchainvote),
+            address(rewards),
+            0
+        );
         manager = new RecyclerManager(address(tokeVotePool), IRecycler(recycler));
         user0 = new User(manager);
         user1 = new User(manager);
@@ -97,6 +109,15 @@ contract RecyclerTest is DSTest, Vm, Utilities {
         assertEq(recycler.capacity(), 0);
         recycler.setDeadline(1, 0);
         assertEq(recycler.epochAs(1).deadline, 0);
+
+        recycler.setFee(100); // 1%
+        assertEq(recycler.fee(), 100);
+
+        recycler.setMaintainer(address(user0));
+        assertEq(recycler.maintainer(), address(user0));
+
+        recycler.setKey(bytes32(0), true);
+        assertEq(recycler.keys(bytes32(0)), true);
     }
 
     function testSetUnauthorizedError() public {
@@ -110,6 +131,205 @@ contract RecyclerTest is DSTest, Vm, Utilities {
         expectRevert("Denied");
         recycler.setDeadline(1, 0);
         stopPrank();
+    }
+
+    /**
+     * `rollover`
+     */
+
+    // should rollover from epoch 1 to epoch 2
+    // (because epoch 0 has no real rollover to epoch 1)
+    function testRollover() public {
+        realloc_reward_signer(KeyPair.publicKey);
+        // before - create epoch 1
+        assertEq(recycler.cursor(), 0);
+        recycler.next(uint32(block.timestamp));
+
+        // rollover
+        recycler.prepare(1e18);
+        (IRewards.Recipient memory recipient, uint8 v, bytes32 r, bytes32 s) =
+            buildRecipient(1, 181, address(recycler), 1e18, KeyPair.privateKey);
+        recycler.rollover(recipient, v, r, s, 1, uint32(block.timestamp + 100));
+
+        // after
+        assertEq(tokeVotePool.balanceOf(address(recycler)), 1e18);
+        assertEq(recycler.epochAs(1).filled, true);
+        assertEq(recycler.cursor(), 2);
+        assertEq(recycler.epochAs(2).filled, false);
+        assertEq(recycler.epochAs(2).deadline, uint32(block.timestamp + 100));
+    }
+
+    /**
+     * `cycle`
+     */
+
+    function testCycle() public {
+        realloc_reward_signer(KeyPair.publicKey);
+
+        IRewards.Recipient memory recipient;
+        uint8 v;
+        bytes32 r;
+        bytes32 s;
+
+        recycler.prepare(type(uint256).max);
+
+        // compound once
+        (recipient, v, r, s) = buildRecipient(1, 181, address(recycler), 1e18, KeyPair.privateKey);
+        recycler.cycle(recipient, v, r, s);
+        assertEq(tokeVotePool.balanceOf(address(recycler)), 1e18);
+
+        // compound one more time
+        (recipient, v, r, s) = buildRecipient(1, 181, address(recycler), 3e18, KeyPair.privateKey);
+        recycler.cycle(recipient, v, r, s);
+        assertEq(tokeVotePool.balanceOf(address(recycler)), 3e18);
+    }
+
+    function testCycleWithFee() public {
+        realloc_reward_signer(KeyPair.publicKey);
+        recycler.setMaintainer(address(user0));
+        recycler.setFee(100);
+
+        IRewards.Recipient memory recipient;
+        uint8 v;
+        bytes32 r;
+        bytes32 s;
+
+        recycler.prepare(type(uint256).max);
+
+        // compound once
+        (recipient, v, r, s) = buildRecipient(1, 181, address(recycler), 1e18, KeyPair.privateKey);
+        recycler.cycle(recipient, v, r, s);
+        assertEq(tokeVotePool.balanceOf(address(recycler)), 9e17 + 9e16);
+        // check maintainer got the fee
+        assertEq(toke.balanceOf(address(user0)), 1e16);
+
+        // compound one more time
+        (recipient, v, r, s) = buildRecipient(1, 181, address(recycler), 3e18, KeyPair.privateKey);
+        recycler.cycle(recipient, v, r, s);
+        assertEq(tokeVotePool.balanceOf(address(recycler)), 2e18 + 9e17 + 7e16);
+        // check maintainer got the fee
+        assertEq(toke.balanceOf(address(user0)), 3e16);
+    }
+
+    /**
+     * `claim`
+     */
+
+    function testClaim() public {
+        realloc_reward_signer(KeyPair.publicKey);
+
+        (IRewards.Recipient memory recipient, uint8 v, bytes32 r, bytes32 s) =
+            buildRecipient(1, 181, address(recycler), 1e18, KeyPair.privateKey);
+
+        assertEq(toke.balanceOf(address(recycler)), 0);
+        recycler.claim(recipient, v, r, s);
+        assertEq(toke.balanceOf(address(recycler)), 1e18);
+    }
+
+    function testClaimTwice() public {
+        realloc_reward_signer(KeyPair.publicKey);
+
+        IRewards.Recipient memory recipient;
+        uint8 v;
+        bytes32 r;
+        bytes32 s;
+
+        // claim again, w/ 1e18
+        (recipient, v, r, s) = buildRecipient(1, 181, address(recycler), 1e18, KeyPair.privateKey);
+        recycler.claim(recipient, v, r, s);
+
+        // claim again, w/ 3e18
+        (recipient, v, r, s) = buildRecipient(1, 181, address(recycler), 3e18, KeyPair.privateKey);
+        recycler.claim(recipient, v, r, s);
+
+        // NOTE: the claimable amount is cumulative, so final amount should be 3e18
+        assertEq(toke.balanceOf(address(recycler)), 3e18);
+    }
+
+    function testClaimWithFee() public {
+        realloc_reward_signer(KeyPair.publicKey);
+        recycler.setFee(1000); // 10%
+        recycler.setMaintainer(address(user0));
+
+        (IRewards.Recipient memory recipient, uint8 v, bytes32 r, bytes32 s) =
+            buildRecipient(1, 181, address(recycler), 1e18, KeyPair.privateKey);
+
+        assertEq(toke.balanceOf(address(recycler)), 0);
+        recycler.claim(recipient, v, r, s);
+        assertEq(toke.balanceOf(address(recycler)), 9e17);
+        assertEq(toke.balanceOf(address(user0)), 1e17);
+    }
+
+    /**
+     * `stake`
+     */
+
+    function testStake() public {
+        realloc_toke(address(recycler), 1e18);
+
+        recycler.prepare(1e18);
+        assertEq(tokeVotePool.balanceOf(address(recycler)), 0);
+        recycler.stake(1e18);
+        assertEq(tokeVotePool.balanceOf(address(recycler)), 1e18);
+    }
+
+    function testStakeNoAllowanceError() public {
+        realloc_toke(address(recycler), 1e18);
+
+        expectRevert("ERC20: transfer amount exceeds allowance");
+        recycler.stake(1e18);
+    }
+
+    function testStakeUnauthorized() public {
+        realloc_toke(address(recycler), 1e18);
+
+        recycler.prepare(1e18);
+        startPrank(address(user0));
+        expectRevert("Denied");
+        recycler.stake(1e18);
+        stopPrank();
+    }
+
+    /**
+     * `prepare`
+     */
+
+     function testPrepare() public {
+        assertEq(toke.allowance(address(recycler), address(tokeVotePool)), 0);
+        recycler.prepare(type(uint256).max);
+        assertEq(toke.allowance(address(recycler), address(tokeVotePool)), type(uint256).max);
+    }
+
+    // should revert because msg.sender is not auth:ed for recycler
+    function testPrepareUnauthorizedError() public {
+        startPrank(address(user0));
+        expectRevert("Denied");
+        recycler.prepare(0);
+    }
+
+    /**
+     * `vote`
+     */
+
+    function testVote() public {
+        recycler.setKey(bytes32("tcr-default"), true);
+        recycler.setKey(bytes32("fxs-default"), true);
+        recycler.setKey(bytes32("eth-default"), true);
+
+        IOnChainVoteL1.UserVoteAllocationItem[] memory allocations = new IOnChainVoteL1.UserVoteAllocationItem[](3);
+        allocations[0] = IOnChainVoteL1.UserVoteAllocationItem({ reactorKey: bytes32("tcr-default"), amount: 1e18 });
+        allocations[1] = IOnChainVoteL1.UserVoteAllocationItem({ reactorKey: bytes32("fxs-default"), amount: 3e18 });
+        allocations[2] = IOnChainVoteL1.UserVoteAllocationItem({ reactorKey: bytes32("eth-default"), amount: 2e18 });
+        IOnChainVoteL1.UserVotePayload memory data = IOnChainVoteL1.UserVotePayload({
+            account: address(recycler),
+            voteSessionKey: 0x00000000000000000000000000000000000000000000000000000000000000ba,
+            nonce: 0,
+            chainId: uint256(137),
+            totalVotes: 6e18,
+            allocations: allocations
+        });
+
+        recycler.vote(data);
     }
 
     /**
