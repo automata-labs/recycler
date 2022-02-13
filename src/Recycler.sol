@@ -644,24 +644,13 @@ contract Recycler is IRecycler, Lock, Auth, Pause {
         lock
         auth
     {
-        if (token == derivative)
+        if (token == derivative || token == underlying)
             revert InvalidToken();
 
         if (to == address(0))
             revert ParameterZero();
 
         token.safeTransfer(to, _balance(token));
-    }
-
-    /// @notice Sweep ETH from this contract.
-    function sweeth(address payable to)
-        external
-        payable
-        lock
-        auth
-    {
-        (bool success, ) = to.call{value: msg.value}("");
-        require(success, "Failed to sweep ETH.");
     }
 
     /**

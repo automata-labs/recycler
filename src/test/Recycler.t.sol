@@ -8,6 +8,7 @@ import "../interfaces/IRecycler.sol";
 import "../libraries/SafeTransfer.sol";
 import "../Recycler.sol";
 import "../RecyclerManager.sol";
+import "./mocks/ERC20Mock.sol";
 import "./utils/Utilities.sol";
 import "./utils/Vm.sol";
 
@@ -876,5 +877,17 @@ contract RecyclerTest is DSTest, Vm, Utilities {
         assertEq(recycler.sharesOf(address(user0)), 1e18 + 5e17);
         assertEq(recycler.bufferAs(address(user0)).epoch, 0);
         assertEq(recycler.bufferAs(address(user0)).amount, 0);
+    }
+    
+    /**
+     * `sweep`
+     */
+
+    function testSweep() public {
+        ERC20Mock erc20 = new ERC20Mock("Token", "TOKEN", 18);
+        erc20.mint(address(recycler), 1e18);
+        assertEq(erc20.balanceOf(address(recycler)), 1e18);
+        recycler.sweep(address(erc20), address(this));
+        assertEq(erc20.balanceOf(address(this)), 1e18);
     }
 }
