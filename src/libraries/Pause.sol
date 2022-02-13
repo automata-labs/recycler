@@ -5,10 +5,13 @@ import "./Auth.sol";
 
 contract Pause is Auth {
     /// @notice Emitted when a function is destroyed (paused forever).
+    /// @param sig The function signature.
     event Destroyed(bytes4 sig);
     /// @notice Emitted when a function is paused.
+    /// @param sig The function signature.
     event Paused(bytes4 sig);
     /// @notice Emitted when a function is unpaused.
+    /// @param sig The function signature.
     event Unpaused(bytes4 sig);
 
     uint256 public constant DESTROY = uint256(keccak256("Pause.destroy"));
