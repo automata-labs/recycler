@@ -5,5 +5,11 @@ import "../../interfaces/IRecycler.sol";
 import "../../RecyclerManager.sol";
 
 contract RecyclerManagerDeployer is RecyclerManager {
-    constructor(address token, IRecycler recycler) RecyclerManager(token, recycler) {}
+    constructor(
+        address token,
+        IRecycler recycler
+    ) RecyclerManager(
+        token,
+        recycler
+    ) {}
 }
