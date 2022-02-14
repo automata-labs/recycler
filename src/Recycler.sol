@@ -601,7 +601,7 @@ contract Recycler is IRecycler, Lock, Auth, Pause {
             uint256 fees = (amount * fee) / MAX_FEE;
             uint256 shares;
 
-            if (totalShares == 0 || totalSupply() + amount - fees == 0) {
+            if (totalShares == 0 || totalSupply() - fees == 0) {
                 shares = fees;
             } else {
                 shares = shares = (fees * totalShares) / (totalSupply() - fees);

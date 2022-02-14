@@ -161,13 +161,12 @@ contract RecyclerTest is DSTest, Vm, Utilities {
 
     function testCycle() public {
         realloc_reward_signer(keyPair.publicKey);
+        recycler.prepare(type(uint256).max);
 
         IRewards.Recipient memory recipient;
         uint8 v;
         bytes32 r;
         bytes32 s;
-
-        recycler.prepare(type(uint256).max);
 
         // compound once
         (recipient, v, r, s) = buildRecipient(1, 181, address(recycler), 1e18, keyPair.privateKey);
@@ -182,29 +181,37 @@ contract RecyclerTest is DSTest, Vm, Utilities {
 
     function testCycleWithFee() public {
         realloc_reward_signer(keyPair.publicKey);
-        recycler.setMaintainer(address(user0));
-        recycler.setFee(100);
+        recycler.setMaintainer(address(this));
+        recycler.setFee(1000); // 10%
+        recycler.next(uint32(block.timestamp) + 1);
+        user0.mint(2e18);
+        user1.mint(3e18);
+        user2.mint(5e18); // 10e18 shares in total
+        recycler.fill(1);
+        recycler.prepare(type(uint256).max);
 
         IRewards.Recipient memory recipient;
         uint8 v;
         bytes32 r;
         bytes32 s;
 
-        recycler.prepare(type(uint256).max);
-
         // compound once
         (recipient, v, r, s) = buildRecipient(1, 181, address(recycler), 1e18, keyPair.privateKey);
         recycler.cycle(recipient, v, r, s);
-        assertEq(tokeVotePool.balanceOf(address(recycler)), 9e17 + 9e16);
-        // check maintainer got the fee
-        assertEq(toke.balanceOf(address(user0)), 1e16);
+        assertEq(recycler.totalSupply(), 11e18);
+        assertEq(recycler.balanceOf(address(this)), 1e17 - 1);
+        assertEq(recycler.sharesOf(address(this)), 91743119266055045);
 
         // compound one more time
-        (recipient, v, r, s) = buildRecipient(1, 181, address(recycler), 3e18, keyPair.privateKey);
+        // the claimable amount is cumulative, so we need 4e18 to claim another 3e18
+        (recipient, v, r, s) = buildRecipient(1, 182, address(recycler), 4e18, keyPair.privateKey);
         recycler.cycle(recipient, v, r, s);
-        assertEq(tokeVotePool.balanceOf(address(recycler)), 2e18 + 9e17 + 7e16);
-        // check maintainer got the fee
-        assertEq(toke.balanceOf(address(user0)), 3e16);
+        assertEq(recycler.totalSupply(), 14e18);
+        // this value is higher than (3e17 + 1e17) because we're minting shares, and not just
+        // distrbuting the fee as a flat token/coin. so, with each cycle, the maintainer gets some
+        // of the next rewards as it's also a vault LP now.
+        assertEq(recycler.balanceOf(address(this)), 424545454545454543);
+        assertEq(recycler.sharesOf(address(this)), 312730194870421213);
     }
 
     /**
@@ -241,26 +248,6 @@ contract RecyclerTest is DSTest, Vm, Utilities {
         // NOTE: the claimable amount is cumulative, so final amount should be 3e18
         assertEq(toke.balanceOf(address(recycler)), 3e18);
     }
-
-    // function testClaimWithFee() public {
-    //     realloc_reward_signer(keyPair.publicKey);
-    //     recycler.setFee(1000); // 10%
-    //     recycler.setMaintainer(address(user0));
-
-    //     (IRewards.Recipient memory recipient, uint8 v, bytes32 r, bytes32 s) =
-    //         buildRecipient(1, 181, address(recycler), 1e18, keyPair.privateKey);
-
-    //     assertEq(toke.balanceOf(address(recycler)), 0);
-    //     recycler.claim(recipient, v, r, s);
-
-    //     assertEq(toke.balanceOf(address(recycler)), 1e18);
-    //     assertEq(recycler.totalShares(), 1e17);
-    //     // shares are 1e17 because fee is 10%
-    //     assertEq(recycler.sharesOf(address(user0)), 1e17);
-    //     // shares should equal all the coins, because there are no other depositors
-    //     // so shares represent the whole claim, 1e18
-    //     assertEq(recycler.balanceOf(address(user0)), 1e18);
-    // }
 
     /**
      * `stake`
@@ -314,7 +301,7 @@ contract RecyclerTest is DSTest, Vm, Utilities {
         assertEq(recycler.totalSupply(), 10e18);
         assertEq(recycler.totalShares(), 9090909090909090909);
         assertEq(recycler.sharesOf(address(this)), 90909090909090909);
-        // loss of 1 precision because of repeating 9090...
+        // loss of 1 precision
         assertEq(recycler.balanceOf(address(this)), 1e17 - 1);
     }
 
