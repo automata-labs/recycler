@@ -229,7 +229,7 @@ contract Recycler is IRecycler, Lock, Auth, Pause {
 
     /// @inheritdoc IERC20
     /// @dev Returns the total amount of active- and buffering coins.
-    function totalSupply() external view returns (uint256) {
+    function totalSupply() public view returns (uint256) {
         return IERC20(derivative).balanceOf(address(this));
     }
 
@@ -351,6 +351,14 @@ contract Recycler is IRecycler, Lock, Auth, Pause {
         } else {
             return false;
         }
+    }
+
+    function coinsToShares(uint256 coins) external view returns (uint256) {
+        return coins.toShares(totalShares, totalCoins());
+    }
+
+    function sharesToCoins(uint256 shares) external view returns (uint256) {
+        return shares.toCoins(totalCoins(), totalShares);
     }
 
     /**
@@ -565,21 +573,7 @@ contract Recycler is IRecycler, Lock, Auth, Pause {
         public
         auth
     {
-        uint256 claimed = IRewards(rewards).getClaimableAmount(IRewards.Recipient({
-            chainId: recipient.chainId,
-            cycle: recipient.cycle,
-            wallet: recipient.wallet,
-            amount: recipient.amount
-        }));
-        uint256 fees;
-        
         IRewards(rewards).claim(recipient, v, r, s);
-
-        if (fee > 0 && maintainer != address(0)) {
-            fees = (claimed * fee) / MAX_FEE;
-            claimed -= fees;
-            IERC20(underlying).transfer(maintainer, fees);
-        }
     }
 
     /// @inheritdoc IRecycler
@@ -588,6 +582,34 @@ contract Recycler is IRecycler, Lock, Auth, Pause {
         auth
     {
         ITokeVotePool(derivative).deposit(amount);
+
+        // The equation for minting the fee as shares to the maintainer is defined as:
+        //
+        // fee_percentage = fee / max_fee
+        //
+        //                        rewards * fee_percentage
+        // shares = ---------------------------------------------------- * total_shares
+        //           total_supply + rewards - (rewards * fee_percentage)
+        //
+        // and incorporates a similar behaviour as Lido's [1]. The function must include the rewards
+        // that otherwise goes to depositors in the denominator so that the fee sent to the
+        // maintainer does not get compounding. So the maintainer's shares can be thought of as a
+        // deposit in an epoch, not earning until next cycle.
+        //
+        // [1]: https://github.com/lidofinance/lido-dao/blob/master/contracts/0.4.24/Lido.sol
+        if (fee > 0 && maintainer != address(0)) {
+            uint256 fees = (amount * fee) / MAX_FEE;
+            uint256 shares;
+
+            if (totalShares == 0 || totalSupply() - fees == 0) {
+                shares = fees;
+            } else {
+                shares = shares = (fees * totalShares) / (totalSupply() - fees);
+            }
+
+            totalShares += shares;
+            sharesOf[maintainer] += shares;
+        }
     }
 
     /// @inheritdoc IRecycler
