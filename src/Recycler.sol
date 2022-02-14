@@ -109,6 +109,8 @@ contract Recycler is IRecycler, Lock, Auth, Pause {
 
     /// @notice The max fee that can be set.
     uint256 internal constant MAX_FEE = 1e4;
+    /// @notice The capped fee at 10%.
+    uint256 internal constant CAP_FEE = 1e3;
     /// @notice The internal name variable.
     /// @dev Can be changed.
     string internal _name;
@@ -374,7 +376,7 @@ contract Recycler is IRecycler, Lock, Auth, Pause {
         external
         auth
     {
-        if (fee_ > MAX_FEE)
+        if (fee_ > CAP_FEE)
             revert InvalidFee();
 
         fee = fee_;
