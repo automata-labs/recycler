@@ -92,17 +92,21 @@ contract RecyclerTest is DSTest, Vm, Utilities {
     function testSet() public {
         recycler.next(0);
 
-        recycler.setDust(123e18);
-        assertEq(recycler.dust(), 123e18);
+        recycler.setName("Definitely Not Bitcoin");
+        assertEq(recycler.name(), "Definitely Not Bitcoin");
+
         recycler.setCapacity(456e18);
         assertEq(recycler.capacity(), 456e18);
-        recycler.setDeadline(1, uint32(block.timestamp));
-        assertEq(recycler.epochAs(1).deadline, uint32(block.timestamp));
-
-        recycler.setDust(0);
-        assertEq(recycler.dust(), 0);
         recycler.setCapacity(0);
         assertEq(recycler.capacity(), 0);
+
+        recycler.setDust(123e18);
+        assertEq(recycler.dust(), 123e18);
+        recycler.setDust(0);
+        assertEq(recycler.dust(), 0);
+
+        recycler.setDeadline(1, uint32(block.timestamp));
+        assertEq(recycler.epochAs(1).deadline, uint32(block.timestamp));
         recycler.setDeadline(1, 0);
         assertEq(recycler.epochAs(1).deadline, 0);
 
