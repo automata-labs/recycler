@@ -30,89 +30,6 @@ contract Recycler is IRecycler, Lock, Auth, Pause {
     using SafeTransfer for address;
     using Share for uint256;
 
-    /// @notice Emitted when capacity is set.
-    /// @param capacity The set capacity value.
-    event SetCapacity(uint256 capacity);
-    /// @notice Emitted when a new deadline is set for an epoch
-    /// @param epoch The set capacity value.
-    event SetDeadline(uint256 epoch, uint32 deadline);
-    /// @notice Emitted when dust is set.
-    /// @param dust The set dust value.
-    event SetDust(uint256 dust);
-    /// @notice Emitted when fee is set.
-    /// @param fee The set fee value.
-    event SetFee(uint256 fee);
-    /// @notice Emitted when a reactor key is set.
-    /// @param key The reactor key.
-    /// @param value The value of the reactor key.
-    event SetKey(bytes32 key, bool value);
-    /// @notice Emitted when maintainer is set.
-    /// @param maintainer The set maintainer address.
-    event SetMaintainer(address maintainer);
-    /// @notice Emitted when name is set.
-    /// @dev Not emitted in constructor/deployment.
-    /// @param name The set dust value.
-    event SetName(string name);
-    /// @notice Emitted when creating a new epoch.
-    /// @param sender The `msg.sender`.
-    /// @param cursor The epoch id of the created epoch.
-    /// @param deadline The deadline mint unix timestamp of the epoch.
-    event Next(address indexed sender, uint256 indexed cursor, uint32 deadline);
-    /// @notice Emitted when buffering coins into the vault.
-    /// @param sender The `msg.sender`.
-    /// @param to The address to receive the buffered coins balance.
-    /// @param buffer The amount of coins being buffered.
-    event Mint(address indexed sender, address indexed to, uint256 buffer);
-    /// @notice Emitted when burning shares for coins.
-    /// @param sender The `msg.sender`.
-    /// @param from The address to burn shares from.
-    /// @param to The address to receive the redeemed coins.
-    /// @param coins The amount of coins being buffered.
-    event Burn(address indexed sender, address indexed from, address indexed to, uint256 coins);
-    /// @notice Emitted when exiting into coins.
-    /// @param sender The `msg.sender`.
-    /// @param from The address to burn buffer from.
-    /// @param to The address to receive the buffered coins.
-    /// @param buffer The amount of coins being withdrawn.
-    event Exit(address indexed sender, address indexed from, address indexed to, uint256 buffer);
-    /// @notice Emitted when an epoch is filled.
-    /// @param sender The `msg.sender`.
-    /// @param epoch The id of the epoch that was filled.
-    /// @param coins The amount of coins that was deposited into the epoch when it was open.
-    /// @param shares The amount of shares issued to the epoch when it was filled.
-    event Fill(address indexed sender, uint256 indexed epoch, uint256 coins, uint256 shares);
-
-    /// @notice Throws when trying to mint when a buffer still exists and cannot be ticked/poked.
-    error BufferExists();
-    /// @notice Throws when permit deadline has expired.
-    error DeadlineExpired();
-    /// @notice Throws when trying to fill an epoch with a prev-sibling that's not filled.
-    error Discontinuity();
-    /// @notice Throws when minting on an latest epoch that's dead or filled.
-    error EpochExpired();
-    /// @notice Throws there's an insufficient amount from a transfer pull request.
-    error InsufficientTransfer();
-    /// @notice Throws when conversion to shares gives zero.
-    error InsufficientExchange();
-    /// @notice Throws when the deadline is invalid (0).
-    error InvalidDeadline();
-    /// @notice Throws when the epoch parameters is invalid (0).
-    error InvalidEpoch();
-    /// @notice Throws when the fee is set over 100%.
-    error InvalidFee();
-    /// @notice Throws when the permit signature is invalid.
-    error InvalidSignature();
-    /// @notice Throws when trying to sweep an valid token.
-    error InvalidToken();
-    /// @notice Throws when the max capacity is exceeded.
-    error OverflowCapacity();
-    /// @notice Throws when an amount parameter is less than dust.
-    error ParameterDust();
-    /// @notice Throws when an amount parameter is zero.
-    error ParameterZero();
-    /// @notice Throws when the selector is not matchable.
-    error UndefinedSelector();
-
     /// @notice The max fee that can be set.
     uint256 internal constant MAX_FEE = 1e4;
     /// @notice The capped fee at 10%.
@@ -121,20 +38,20 @@ contract Recycler is IRecycler, Lock, Auth, Pause {
     /// @dev Can be changed.
     string internal _name;
 
-    /// @inheritdoc IRecycler
+    /// @inheritdoc IRecyclerState
     address public immutable underlying;
-    /// @inheritdoc IRecycler
+    /// @inheritdoc IRecyclerState
     address public immutable derivative;
-    /// @inheritdoc IRecycler
+    /// @inheritdoc IRecyclerState
     address public immutable onchainvote;
-    /// @inheritdoc IRecycler
+    /// @inheritdoc IRecyclerState
     address public immutable rewards;
 
-    /// @inheritdoc IRecycler
+    /// @inheritdoc IRecyclerState
     uint256 public dust;
-    /// @inheritdoc IRecycler
+    /// @inheritdoc IRecyclerState
     uint256 public capacity;
-    /// @inheritdoc IRecycler
+    /// @inheritdoc IRecyclerState
     uint256 public cursor;
     /// @notice The maintainer of the vault.
     /// @dev Receives the fee when calling `claim`, if non-zero.
@@ -142,21 +59,21 @@ contract Recycler is IRecycler, Lock, Auth, Pause {
     /// @notice The fee
     uint256 public fee;
 
-    /// @inheritdoc IRecycler
+    /// @inheritdoc IRecyclerState
     uint256 public totalShares;
-    /// @inheritdoc IRecycler
+    /// @inheritdoc IRecyclerState
     uint256 public totalBuffer;
-    /// @inheritdoc IRecycler
+    /// @inheritdoc IRecyclerState
     mapping(address => uint256) public sharesOf;
-    /// @inheritdoc IRecycler
+    /// @inheritdoc IRecyclerState
     mapping(address => Buffer.Data) public bufferOf;
-    /// @inheritdoc IRecycler
+    /// @inheritdoc IRecyclerState
     mapping(uint256 => Epoch.Data) public epochOf;
-    /// @inheritdoc IRecycler
+    /// @inheritdoc IERC20
     mapping(address => mapping(address => uint256)) public allowance;
-    /// @inheritdoc IRecycler
+    /// @inheritdoc IERC2612
     mapping(address => uint256) public nonces;
-    /// @inheritdoc IRecycler
+    /// @inheritdoc IRecyclerState
     mapping(bytes32 => bool) public keys;
 
     /// @notice The initial chain id set at deployment.
@@ -239,7 +156,7 @@ contract Recycler is IRecycler, Lock, Auth, Pause {
         return IERC20(derivative).balanceOf(address(this));
     }
 
-    /// @inheritdoc IRecycler
+    /// @inheritdoc IRecyclerStateDerived
     function totalCoins() public view returns (uint256) {
         uint256 balance = IERC20(derivative).balanceOf(address(this));
 
@@ -257,17 +174,17 @@ contract Recycler is IRecycler, Lock, Auth, Pause {
         return shares.toCoins(totalCoins(), totalShares);
     }
 
-    /// @inheritdoc IRecycler
+    /// @inheritdoc IRecyclerStateDerived
     function queuedOf(address account) external view returns (uint256) {
         return bufferOf[account].toQueued(epochOf);
     }
 
-    /// @inheritdoc IRecycler
+    /// @inheritdoc IRecyclerStateDerived
     function epochAs(uint256 index) external view returns (Epoch.Data memory) {
         return epochOf[index];
     }
 
-    /// @inheritdoc IRecycler
+    /// @inheritdoc IRecyclerStateDerived
     function bufferAs(address account) external view returns (Buffer.Data memory) {
         return bufferOf[account];
     }
@@ -354,7 +271,7 @@ contract Recycler is IRecycler, Lock, Auth, Pause {
      * View
      */
 
-    /// @inheritdoc IRecycler
+    /// @inheritdoc IRecyclerStateDerived
     function rotating() external view returns (bool) {
         if (epochOf[cursor].filled || epochOf[cursor].deadline < _blockTimestamp()) {
             return true;
@@ -363,12 +280,12 @@ contract Recycler is IRecycler, Lock, Auth, Pause {
         }
     }
 
-    /// @inheritdoc IRecycler
+    /// @inheritdoc IRecyclerStateDerived
     function coinsToShares(uint256 coins) external view returns (uint256) {
         return coins.toShares(totalShares, totalCoins());
     }
 
-    /// @inheritdoc IRecycler
+    /// @inheritdoc IRecyclerStateDerived
     function sharesToCoins(uint256 shares) external view returns (uint256) {
         return shares.toCoins(totalCoins(), totalShares);
     }
@@ -377,7 +294,7 @@ contract Recycler is IRecycler, Lock, Auth, Pause {
      * Setters
      */
 
-    /// @inheritdoc IRecycler
+    /// @inheritdoc IRecyclerActions
     function setName(string memory name_)
         external
         auth
@@ -386,7 +303,7 @@ contract Recycler is IRecycler, Lock, Auth, Pause {
         emit SetName(_name);
     }
 
-    /// @inheritdoc IRecycler
+    /// @inheritdoc IRecyclerActions
     function setMaintainer(address maintainer_)
         external
         auth
@@ -395,7 +312,7 @@ contract Recycler is IRecycler, Lock, Auth, Pause {
         emit SetMaintainer(maintainer);
     }
 
-    /// @inheritdoc IRecycler
+    /// @inheritdoc IRecyclerActions
     function setFee(uint256 fee_)
         external
         auth
@@ -407,7 +324,7 @@ contract Recycler is IRecycler, Lock, Auth, Pause {
         emit SetFee(fee);
     }
 
-    /// @inheritdoc IRecycler
+    /// @inheritdoc IRecyclerActions
     function setDust(uint256 dust_)
         external
         auth
@@ -416,7 +333,7 @@ contract Recycler is IRecycler, Lock, Auth, Pause {
         emit SetDust(dust);
     }
 
-    /// @inheritdoc IRecycler
+    /// @inheritdoc IRecyclerActions
     function setCapacity(uint256 capacity_)
         external
         auth
@@ -433,7 +350,7 @@ contract Recycler is IRecycler, Lock, Auth, Pause {
         emit SetKey(key, value);
     }
 
-    /// @inheritdoc IRecycler
+    /// @inheritdoc IRecyclerActions
     function setDeadline(uint256 epoch, uint32 deadline)
         external
         auth
@@ -449,7 +366,7 @@ contract Recycler is IRecycler, Lock, Auth, Pause {
      * Actions
      */
 
-    /// @inheritdoc IRecycler
+    /// @inheritdoc IRecyclerActions
     function poke(address account)
         external
         noauth
@@ -459,7 +376,7 @@ contract Recycler is IRecycler, Lock, Auth, Pause {
         return _tick(account);
     }
 
-    /// @inheritdoc IRecycler
+    /// @inheritdoc IRecyclerActions
     function mint(address to, uint256 buffer, bytes memory data)
         external
         noauth
@@ -498,7 +415,7 @@ contract Recycler is IRecycler, Lock, Auth, Pause {
         emit Mint(msg.sender, to, buffer);
     }
 
-    /// @inheritdoc IRecycler
+    /// @inheritdoc IRecyclerActions
     function burn(address from, address to, uint256 coins)
         external
         noauth
@@ -523,7 +440,7 @@ contract Recycler is IRecycler, Lock, Auth, Pause {
         emit Burn(msg.sender, from, to, coins);
     }
 
-    /// @inheritdoc IRecycler
+    /// @inheritdoc IRecyclerActions
     function quit(address from, address to, uint256 buffer)
         external
         noauth
@@ -551,7 +468,7 @@ contract Recycler is IRecycler, Lock, Auth, Pause {
      * Maintainance
      */
 
-    /// @inheritdoc IRecycler
+    /// @inheritdoc IRecyclerActions
     function rollover(
         IRewards.Recipient memory recipient,
         uint8 v,
@@ -574,7 +491,7 @@ contract Recycler is IRecycler, Lock, Auth, Pause {
         next(deadline);
     }
 
-    /// @inheritdoc IRecycler
+    /// @inheritdoc IRecyclerActions
     function cycle(IRewards.Recipient memory recipient, uint8 v, bytes32 r, bytes32 s)
         public
         auth
@@ -583,7 +500,7 @@ contract Recycler is IRecycler, Lock, Auth, Pause {
         stake(_balance(underlying));
     }
 
-    /// @inheritdoc IRecycler
+    /// @inheritdoc IRecyclerActions
     function claim(IRewards.Recipient memory recipient, uint8 v, bytes32 r, bytes32 s)
         public
         auth
@@ -591,7 +508,7 @@ contract Recycler is IRecycler, Lock, Auth, Pause {
         IRewards(rewards).claim(recipient, v, r, s);
     }
 
-    /// @inheritdoc IRecycler
+    /// @inheritdoc IRecyclerActions
     function stake(uint256 amount)
         public
         auth
@@ -627,7 +544,7 @@ contract Recycler is IRecycler, Lock, Auth, Pause {
         }
     }
 
-    /// @inheritdoc IRecycler
+    /// @inheritdoc IRecyclerActions
     function prepare(uint256 amount)
         external
         auth
@@ -635,7 +552,7 @@ contract Recycler is IRecycler, Lock, Auth, Pause {
         IERC20(underlying).approve(derivative, amount);
     }
 
-    /// @inheritdoc IRecycler
+    /// @inheritdoc IRecyclerActions
     function vote(IOnChainVoteL1.UserVotePayload calldata data)
         external
         auth
@@ -643,7 +560,7 @@ contract Recycler is IRecycler, Lock, Auth, Pause {
         IOnChainVoteL1(onchainvote).vote(data);
     }
 
-    /// @inheritdoc IRecycler
+    /// @inheritdoc IRecyclerActions
     function next(uint32 deadline)
         public
         auth
@@ -653,7 +570,7 @@ contract Recycler is IRecycler, Lock, Auth, Pause {
         emit Next(msg.sender, id, deadline);
     }
 
-    /// @inheritdoc IRecycler
+    /// @inheritdoc IRecyclerActions
     function fill(uint256 epoch)
         public
         auth
@@ -697,7 +614,7 @@ contract Recycler is IRecycler, Lock, Auth, Pause {
      * Upgradeability
      */
 
-    /// @inheritdoc IRecycler
+    /// @inheritdoc IRecyclerActions
     function execute(address[] calldata targets, uint256[] calldata values, bytes[] calldata datas)
         external
         auth
