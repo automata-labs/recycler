@@ -1,0 +1,3 @@
+[default]
+optimizer = true
+optimizer_runs = 5000
