@@ -74,14 +74,14 @@ contract RecyclerTest is DSTest, Vm, Utilities {
      */
 
     function testPause() public {
-        recycler.pause(IRecycler.mint.selector);
-        assertEq(recycler.paused(IRecycler.mint.selector), 1);
+        recycler.pause(IRecyclerActions.mint.selector);
+        assertEq(recycler.paused(IRecyclerActions.mint.selector), 1);
     }
 
     function testPauseUnauthorizedError() public {
         startPrank(address(user0));
         expectRevert("Denied");
-        recycler.pause(IRecycler.mint.selector);
+        recycler.pause(IRecyclerActions.mint.selector);
         stopPrank();
     }
 
@@ -537,7 +537,7 @@ contract RecyclerTest is DSTest, Vm, Utilities {
         realloc_ttoke(address(this), 1e18);
         tokeVotePool.approve(address(manager), type(uint256).max);
 
-        recycler.pause(IRecycler.mint.selector);
+        recycler.pause(IRecyclerActions.mint.selector);
         expectRevert("Paused");
         manager.mint(address(this), 1e18);
     }
