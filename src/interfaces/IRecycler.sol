@@ -91,6 +91,16 @@ interface IRecycler is IERC20, IERC20Metadata, IERC2612 {
     /// @notice Returns whether the cycle is rolling over or not.
     function rotating() external view returns (bool);
 
+    /// @notice Sets the name.
+    /// @param name_ The new name to be set.
+    function setName(string memory name_) external;
+    /// @notice Sets the maintainer.
+    /// @param maintainer_ The new maintainer that receives the fee.
+    function setMaintainer(address maintainer_) external;
+    /// @notice Sets the maintainer fee.
+    /// @dev The fee is capped by `CAP_FEE`.
+    /// @param fee_ The new fee to be set.
+    function setFee(uint256 fee_) external;
     /// @notice Set the dust value. Minimum amount of tokens required to `mint`.
     /// @param dust_ The dust amount.
     function setDust(uint256 dust_) external;

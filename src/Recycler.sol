@@ -357,6 +357,7 @@ contract Recycler is IRecycler, Lock, Auth, Pause {
      * Setters
      */
 
+    /// @inheritdoc IRecycler
     function setName(string memory name_)
         external
         auth
@@ -365,6 +366,7 @@ contract Recycler is IRecycler, Lock, Auth, Pause {
         emit SetName(_name);
     }
 
+    /// @inheritdoc IRecycler
     function setMaintainer(address maintainer_)
         external
         auth
@@ -372,6 +374,7 @@ contract Recycler is IRecycler, Lock, Auth, Pause {
         maintainer = maintainer_;
     }
 
+    /// @inheritdoc IRecycler
     function setFee(uint256 fee_)
         external
         auth
