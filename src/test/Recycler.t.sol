@@ -242,19 +242,25 @@ contract RecyclerTest is DSTest, Vm, Utilities {
         assertEq(toke.balanceOf(address(recycler)), 3e18);
     }
 
-    function testClaimWithFee() public {
-        realloc_reward_signer(keyPair.publicKey);
-        recycler.setFee(1000); // 10%
-        recycler.setMaintainer(address(user0));
+    // function testClaimWithFee() public {
+    //     realloc_reward_signer(keyPair.publicKey);
+    //     recycler.setFee(1000); // 10%
+    //     recycler.setMaintainer(address(user0));
 
-        (IRewards.Recipient memory recipient, uint8 v, bytes32 r, bytes32 s) =
-            buildRecipient(1, 181, address(recycler), 1e18, keyPair.privateKey);
+    //     (IRewards.Recipient memory recipient, uint8 v, bytes32 r, bytes32 s) =
+    //         buildRecipient(1, 181, address(recycler), 1e18, keyPair.privateKey);
 
-        assertEq(toke.balanceOf(address(recycler)), 0);
-        recycler.claim(recipient, v, r, s);
-        assertEq(toke.balanceOf(address(recycler)), 9e17);
-        assertEq(toke.balanceOf(address(user0)), 1e17);
-    }
+    //     assertEq(toke.balanceOf(address(recycler)), 0);
+    //     recycler.claim(recipient, v, r, s);
+
+    //     assertEq(toke.balanceOf(address(recycler)), 1e18);
+    //     assertEq(recycler.totalShares(), 1e17);
+    //     // shares are 1e17 because fee is 10%
+    //     assertEq(recycler.sharesOf(address(user0)), 1e17);
+    //     // shares should equal all the coins, because there are no other depositors
+    //     // so shares represent the whole claim, 1e18
+    //     assertEq(recycler.balanceOf(address(user0)), 1e18);
+    // }
 
     /**
      * `stake`
@@ -269,9 +275,53 @@ contract RecyclerTest is DSTest, Vm, Utilities {
         assertEq(tokeVotePool.balanceOf(address(recycler)), 1e18);
     }
 
+    // staking and claiming with only the maintainer, no user shares in this test
+    function testStakeWithFee() public {
+        realloc_toke(address(recycler), 1e18);
+        recycler.setMaintainer(address(user0));
+        recycler.setFee(1000); // 10%
+
+        recycler.prepare(1e18);
+        recycler.stake(1e18);
+
+        assertEq(recycler.totalSupply(), 1e18);
+        assertEq(recycler.totalShares(), 1e17);
+        // shares are 1e17 because fee is 10%
+        assertEq(recycler.sharesOf(address(user0)), 1e17);
+        // shares should equal all the coins, because there are no other depositors
+        // so shares represent the whole claim, 1e18
+        assertEq(recycler.balanceOf(address(user0)), 1e18);
+    }
+
+    // stake and take fee from the other depositrs
+    function testStakeWithFeeMultipleUsers() public {
+        // set maintainer as this
+        recycler.setMaintainer(address(this));
+        recycler.setFee(1000); // 10%
+        recycler.next(uint32(block.timestamp) + 1);
+
+        user0.mint(1e18);
+        user1.mint(3e18);
+        user2.mint(5e18);
+
+        recycler.fill(1);
+
+        // fake claim, and then stake it
+        realloc_toke(address(recycler), 1e18);
+        recycler.prepare(1e18);
+        recycler.stake(1e18);
+
+        assertEq(recycler.totalSupply(), 10e18);
+        assertEq(recycler.totalShares(), 9090909090909090909);
+        assertEq(recycler.sharesOf(address(this)), 90909090909090909);
+        // loss of 1 precision because of repeating 9090...
+        assertEq(recycler.balanceOf(address(this)), 1e17 - 1);
+    }
+
     function testStakeNoAllowanceError() public {
         realloc_toke(address(recycler), 1e18);
 
+        recycler.prepare(1e18 - 1);
         expectRevert("ERC20: transfer amount exceeds allowance");
         recycler.stake(1e18);
     }
