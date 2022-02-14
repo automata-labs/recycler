@@ -90,6 +90,12 @@ interface IRecycler is IERC20, IERC20Metadata, IERC2612 {
 
     /// @notice Returns whether the cycle is rolling over or not.
     function rotating() external view returns (bool);
+    /// @notice Converts coins to shares.
+    /// @param coins The amount of coins to preview as shares.
+    function coinsToShares(uint256 coins) external view returns (uint256);
+    /// @notice Converts shares to coins.
+    /// @param shares The amount of shares to preview as coinss.
+    function sharesToCoins(uint256 shares) external view returns (uint256);
 
     /// @notice Sets the name.
     /// @param name_ The new name to be set.

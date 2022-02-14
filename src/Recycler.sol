@@ -39,10 +39,16 @@ contract Recycler is IRecycler, Lock, Auth, Pause {
     /// @notice Emitted when dust is set.
     /// @param dust The set dust value.
     event SetDust(uint256 dust);
+    /// @notice Emitted when fee is set.
+    /// @param fee The set fee value.
+    event SetFee(uint256 fee);
     /// @notice Emitted when a reactor key is set.
     /// @param key The reactor key.
     /// @param value The value of the reactor key.
     event SetKey(bytes32 key, bool value);
+    /// @notice Emitted when maintainer is set.
+    /// @param maintainer The set maintainer address.
+    event SetMaintainer(address maintainer);
     /// @notice Emitted when name is set.
     /// @dev Not emitted in constructor/deployment.
     /// @param name The set dust value.
@@ -235,7 +241,13 @@ contract Recycler is IRecycler, Lock, Auth, Pause {
 
     /// @inheritdoc IRecycler
     function totalCoins() public view returns (uint256) {
-        return IERC20(derivative).balanceOf(address(this)) - totalBuffer;
+        uint256 balance = IERC20(derivative).balanceOf(address(this));
+
+        if (balance >= totalBuffer) {
+            return IERC20(derivative).balanceOf(address(this)) - totalBuffer;
+        } else {
+            return 0;
+        }
     }
 
     /// @inheritdoc IERC20
@@ -291,7 +303,6 @@ contract Recycler is IRecycler, Lock, Auth, Pause {
     function approve(address spender, uint256 coins)
         external
         noauth
-        playback
         returns (bool)
     {
         _approve(msg.sender, spender, coins);
@@ -311,7 +322,6 @@ contract Recycler is IRecycler, Lock, Auth, Pause {
     )
         external
         noauth
-        playback
     {
         if (deadline < block.timestamp)
             revert DeadlineExpired();
@@ -353,10 +363,12 @@ contract Recycler is IRecycler, Lock, Auth, Pause {
         }
     }
 
+    /// @inheritdoc IRecycler
     function coinsToShares(uint256 coins) external view returns (uint256) {
         return coins.toShares(totalShares, totalCoins());
     }
 
+    /// @inheritdoc IRecycler
     function sharesToCoins(uint256 shares) external view returns (uint256) {
         return shares.toCoins(totalCoins(), totalShares);
     }
@@ -380,6 +392,7 @@ contract Recycler is IRecycler, Lock, Auth, Pause {
         auth
     {
         maintainer = maintainer_;
+        emit SetMaintainer(maintainer);
     }
 
     /// @inheritdoc IRecycler
@@ -391,6 +404,7 @@ contract Recycler is IRecycler, Lock, Auth, Pause {
             revert InvalidFee();
 
         fee = fee_;
+        emit SetFee(fee);
     }
 
     /// @inheritdoc IRecycler
@@ -416,6 +430,7 @@ contract Recycler is IRecycler, Lock, Auth, Pause {
         auth
     {
         keys[key] = value;
+        emit SetKey(key, value);
     }
 
     /// @inheritdoc IRecycler
@@ -632,7 +647,6 @@ contract Recycler is IRecycler, Lock, Auth, Pause {
     function next(uint32 deadline)
         public
         auth
-        lock
         returns (uint256 id)
     {
         epochOf[(id = ++cursor)].deadline = deadline;
@@ -643,7 +657,6 @@ contract Recycler is IRecycler, Lock, Auth, Pause {
     function fill(uint256 epoch)
         public
         auth
-        lock
         returns (uint256 shares)
     {
         if (epoch == 0)
