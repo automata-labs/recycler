@@ -4,8 +4,16 @@ pragma solidity ^0.8.0;
 import { IERC20 } from "yield-utils-v2/token/IERC20.sol";
 
 interface IERC4626 is IERC20 {
-    event Deposit(address indexed sender, address indexed owner, uint256 amount, uint256 shares);
-    event Withdraw(address indexed sender, address indexed owner, uint256 amount, uint256 shares);
+    /// @notice Emitted on `deposit` and `mint`.
+    event Deposit(address indexed sender, address indexed to, uint256 assets, uint256 shares);
+    /// @notice Emitted on `withdraw` and `redeem`.
+    event Withdraw(
+        address indexed sender,
+        address indexed to,
+        address indexed from,
+        uint256 assets,
+        uint256 shares
+    );
 
     /// @notice The address of the underlying token used by the vault.
     function asset() external view returns (address);

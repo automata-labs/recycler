@@ -30,7 +30,7 @@ contract RecyclerVaultV1 is IRecyclerVaultV1, ERC1967Implementation, RecyclerSto
     /// @notice Converts an account's buffer into shares if the buffer's epoch has been filled -
     /// otherwise the function does nothing.
     modifier tick(address account) {
-        stateOf[account] = _tick(account);
+        emit Transfer(address(0), account, _tick(account));
         _;
     }
 
@@ -106,7 +106,7 @@ contract RecyclerVaultV1 is IRecyclerVaultV1, ERC1967Implementation, RecyclerSto
         view
         returns (uint256 shares)
     {
-        return _tick(account).shares;
+        return _norm(account).shares;
     }
 
     /// @inheritdoc IERC20
@@ -160,7 +160,7 @@ contract RecyclerVaultV1 is IRecyclerVaultV1, ERC1967Implementation, RecyclerSto
         view
         returns (uint256 assets)
     {
-        State.Data memory state = _tick(account);
+        State.Data memory state = _norm(account);
 
         assets += state.buffer;
 
@@ -261,7 +261,9 @@ contract RecyclerVaultV1 is IRecyclerVaultV1, ERC1967Implementation, RecyclerSto
 
         IStaking(staking).deposit(assets);
 
-        emit Transfer(address(0), to, assets);
+        emit Deposit(msg.sender, to, assets, 0);
+
+        return 0;
     }
 
     /// @inheritdoc IERC4626
@@ -311,6 +313,9 @@ contract RecyclerVaultV1 is IRecyclerVaultV1, ERC1967Implementation, RecyclerSto
         stateOf[msg.sender].shares -= shares.u96();
 
         IStaking(staking).requestWithdrawal(assets, 0);
+
+        emit Transfer(from, address(0), shares);
+        emit Request(msg.sender, from, assets, shares);
     }
 
     /// @inheritdoc IERC4626
@@ -357,6 +362,8 @@ contract RecyclerVaultV1 is IRecyclerVaultV1, ERC1967Implementation, RecyclerSto
             stateOf[msg.sender].cycle = 0;
 
         asset.safeTransfer(to, assets);
+
+        emit Withdraw(msg.sender, to, from, assets, 0);
 
         return 0;
     }
@@ -433,7 +440,7 @@ contract RecyclerVaultV1 is IRecyclerVaultV1, ERC1967Implementation, RecyclerSto
         view
         returns (uint256)
     {
-        State.Data memory state = _tick(account);
+        State.Data memory state = _norm(account);
         
         if (state.epoch > 0)
             return state.buffer;
@@ -463,7 +470,7 @@ contract RecyclerVaultV1 is IRecyclerVaultV1, ERC1967Implementation, RecyclerSto
     function poke(address account)
         external
     {
-        stateOf[account] = _tick(account);
+        emit Transfer(address(0), account, _tick(account));
     }
 
     /// @inheritdoc IRecyclerVaultV1Actions
@@ -481,6 +488,7 @@ contract RecyclerVaultV1 is IRecyclerVaultV1, ERC1967Implementation, RecyclerSto
         returns (uint256 id)
     {
         epochOf[(id = ++cursor)].deadline = deadline;
+        emit Next(msg.sender, id, deadline);
     }
 
     /// @inheritdoc IRecyclerVaultV1Actions
@@ -497,6 +505,8 @@ contract RecyclerVaultV1 is IRecyclerVaultV1, ERC1967Implementation, RecyclerSto
         totalBuffer -= epochOf[epoch].buffer;
         epochOf[epoch].shares = shares.u104();
         epochOf[epoch].filled = true;
+
+        emit Fill(msg.sender, epoch, epochOf[epoch].buffer, shares);
     }
 
     /**
@@ -592,6 +602,7 @@ contract RecyclerVaultV1 is IRecyclerVaultV1, ERC1967Implementation, RecyclerSto
 
             totalSupply += shares;
             stateOf[maintainer].shares += shares.u96();
+            emit Transfer(address(0), maintainer, shares);
         }
     }
 
@@ -599,9 +610,24 @@ contract RecyclerVaultV1 is IRecyclerVaultV1, ERC1967Implementation, RecyclerSto
      * Internal helpers
      */
     
-    /// @notice Returns a ticked account.
-    /// @dev Increases shares and removes buffer, if clearable.
+    /// @notice Ticks an acccount.
+    /// @dev Increases shares and removes buffer, if possible.
     function _tick(address account)
+        internal
+        returns (uint256 shares)
+    {
+        State.Data memory state = stateOf[account];
+
+        if (state.epoch > 0 && epochOf[state.epoch].filled) {
+            shares = convertToShares(state.buffer, state.epoch);
+            stateOf[account].shares += shares.u96();
+            delete stateOf[account].epoch;
+            delete stateOf[account].buffer;
+        }
+    }
+
+    /// @notice Returns a ticked account.
+    function _norm(address account)
         internal
         view
         returns (State.Data memory)
