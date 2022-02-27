@@ -9,25 +9,32 @@ import { IManager } from "./interfaces/external/IManager.sol";
 import { IOnChainVoteL1 } from "./interfaces/external/IOnChainVoteL1.sol";
 import { IRewards } from "./interfaces/external/IRewards.sol";
 import { IStaking } from "./interfaces/external/IStaking.sol";
+import {
+    IRecyclerVaultV1,
+    IRecyclerVaultV1Actions,
+    IRecyclerVaultV1StateDerived
+} from "./interfaces/v1/IRecyclerVaultV1.sol";
+import { IERC4626 } from "./interfaces/IERC4626.sol";
 import { Epoch } from "./libraries/data/Epoch.sol";
 import { State } from "./libraries/data/State.sol";
 import { Cast } from "./libraries/Cast.sol";
 import { SafeTransfer } from "./libraries/SafeTransfer.sol";
 import { RecyclerStorageV1 } from "./RecyclerStorage.sol";
 
-contract RecyclerVaultV1 is ERC1967Implementation, RecyclerStorageV1 {
+contract RecyclerVaultV1 is IRecyclerVaultV1, ERC1967Implementation, RecyclerStorageV1 {
     using Cast for uint256;
     using Epoch for Epoch.Data;
     using SafeTransfer for address;
     using State for State.Data;
 
     /// @notice Converts an account's buffer into shares if the buffer's epoch has been filled -
-    ///     otherwise the function does nothing.
+    /// otherwise the function does nothing.
     modifier tick(address account) {
         stateOf[account] = _tick(account);
         _;
     }
 
+    /// @inheritdoc IRecyclerVaultV1Actions
     function initialize(
         address asset_,
         address staking_,
@@ -64,9 +71,9 @@ contract RecyclerVaultV1 is ERC1967Implementation, RecyclerStorageV1 {
 
     /**
      * ERC-20
-     * ERC-4626
      */
 
+    /// @inheritdoc IERC20Metadata
     function name()
         public
         pure
@@ -75,6 +82,7 @@ contract RecyclerVaultV1 is ERC1967Implementation, RecyclerStorageV1 {
         return "(Re)cycler Staked Tokemak";
     }
 
+    /// @inheritdoc IERC20Metadata
     function symbol()
         external
         pure
@@ -83,6 +91,7 @@ contract RecyclerVaultV1 is ERC1967Implementation, RecyclerStorageV1 {
         return "(re)TOKE";
     }
 
+    /// @inheritdoc IERC20Metadata
     function decimals()
         external
         pure
@@ -91,34 +100,7 @@ contract RecyclerVaultV1 is ERC1967Implementation, RecyclerStorageV1 {
         return 18;
     }
 
-    /// @dev Returns the total amount of assets in `this` contract and in the `staking` contract.
-    function totalAssets()
-        public
-        view
-        returns (uint256)
-    {
-        return IERC20(asset).balanceOf(address(this)) + IERC20(staking).balanceOf(address(this));
-    }
-
-    /// @notice The total amount of assets staked in the `staking` contract.
-    function totalActive()
-        public
-        view
-        returns (uint256)
-    {
-        uint256 staked = IERC20(staking).balanceOf(address(this));
-        return (staked > totalBuffer) ? staked - totalBuffer : 0;
-    }
-
-    function totalQueued()
-        external
-        view
-        returns (uint256)
-    {
-        return totalBuffer;
-    }
-
-    /// @notice Returns the shares of an account.
+    /// @inheritdoc IERC20
     function balanceOf(address account)
         public
         view
@@ -127,7 +109,52 @@ contract RecyclerVaultV1 is ERC1967Implementation, RecyclerStorageV1 {
         return _tick(account).shares;
     }
 
-    /// @notice Returns the assets of an account.
+    /// @inheritdoc IERC20
+    function transfer(address, uint256)
+        external
+        view
+        noauth
+        playback
+        returns (bool)
+    {
+        revert("Transfers not supported");
+    }
+
+    /// @inheritdoc IERC20
+    function transferFrom(address, address, uint256)
+        external
+        view
+        noauth
+        playback
+        returns (bool)
+    {
+        revert("Transfers not supported");
+    }
+
+    /// @inheritdoc IERC20
+    function approve(address spender, uint256 coins)
+        external
+        noauth
+        returns (bool)
+    {
+        _approve(msg.sender, spender, coins);
+        return true;
+    }
+
+    /**
+     * ERC-4626
+     */
+    
+    /// @inheritdoc IERC4626
+    function totalAssets()
+        public
+        view
+        returns (uint256)
+    {
+        return IERC20(asset).balanceOf(address(this)) + IERC20(staking).balanceOf(address(this));
+    }
+
+    /// @inheritdoc IERC4626
     function assetsOf(address account)
         external
         view
@@ -141,58 +168,7 @@ contract RecyclerVaultV1 is ERC1967Implementation, RecyclerStorageV1 {
             assets += (state.shares * (totalActive())) / totalSupply;
     }
 
-    /// @notice Returns the active amount of an account.
-    function activeOf(address account)
-        external
-        view
-        returns (uint256)
-    {
-        if (totalSupply > 0)
-            return (balanceOf(account) * (totalActive())) / totalSupply;
-        else
-            return 0;
-    }
-
-    /// @notice Returns the queued amount of an account.
-    function queuedOf(address account)
-        external
-        view
-        returns (uint256)
-    {
-        State.Data memory state = _tick(account);
-        
-        if (state.epoch > 0)
-            return state.buffer;
-        else
-            return 0;
-    }
-
-    function requestedOf(address account)
-        external
-        view
-        returns (uint256)
-    {
-        uint256 cycle = stateOf[account].cycle;
-
-        if (cycle > 0 && cycle > IManager(manager).getCurrentCycleIndex())
-            return stateOf[account].buffer;
-        else
-            return 0;
-    }
-
-    function withdrawableOf(address account)
-        external
-        view
-        returns (uint256)
-    {
-        uint256 cycle = stateOf[account].cycle;
-            
-        if (cycle > 0 && cycle <= IManager(manager).getCurrentCycleIndex())
-            return stateOf[account].buffer;
-        else
-            return 0;
-    }
-
+    /// @inheritdoc IERC4626
     function convertToShares(uint256 assets)
         public
         view
@@ -209,6 +185,7 @@ contract RecyclerVaultV1 is ERC1967Implementation, RecyclerStorageV1 {
         }
     }
 
+    /// @inheritdoc IERC4626
     function convertToShares(uint256 assets, uint256 epoch)
         public
         view
@@ -225,8 +202,9 @@ contract RecyclerVaultV1 is ERC1967Implementation, RecyclerStorageV1 {
         }
     }
 
+    /// @inheritdoc IERC4626
     function convertToAssets(uint256 shares)
-        external
+        public
         view
         returns (uint256)
     {
@@ -236,39 +214,158 @@ contract RecyclerVaultV1 is ERC1967Implementation, RecyclerStorageV1 {
             return 0;
     }
 
-    function transfer(address, uint256)
+    /// @inheritdoc IERC4626
+    function maxDeposit(address)
         external
         view
-        noauth
-        playback
-        returns (bool)
+        returns (uint256 maxAssets)
     {
-        revert("Transfers not supported");
+        return capacity - totalActive();
     }
 
-    function transferFrom(address, address, uint256)
+    /// @inheritdoc IERC4626
+    function previewDeposit(uint256)
+        external
+        pure
+        returns (uint256)
+    {
+        return 0;
+    }
+
+    /// @inheritdoc IERC4626
+    function deposit(uint256 assets, address to)
+        external
+        noauth
+        lock
+        playback
+        tick(to)
+        returns (uint256)
+    {
+        require(assets > dust, "Insufficient deposit");
+        require(assets + _balanceOf(asset, address(this)) <= capacity, "Capacity overflow");
+        // check that current epoch is depositable
+        require(!epochOf[cursor].filled && _blockTimestamp() <= epochOf[cursor].deadline, "Epoch expired");
+        // if a past buffer exists that didn't get cleared by tick, the revert
+        // cannot store to queued deposits at once
+        require(stateOf[to].cycle == 0, "Withdrawal in-process");
+        require(stateOf[to].epoch == cursor || stateOf[to].buffer == 0, "Buffer exists");
+
+        // pull assets
+        asset.safeTransferFrom(msg.sender, address(this), assets);
+
+        // update state
+        epochOf[cursor].buffer += assets.u104();
+        totalBuffer += assets;
+        stateOf[to].epoch = cursor.u32();
+        stateOf[to].buffer += assets.u96();
+
+        IStaking(staking).deposit(assets);
+
+        emit Transfer(address(0), to, assets);
+    }
+
+    /// @inheritdoc IERC4626
+    function maxRequest(address account)
         external
         view
-        noauth
-        playback
-        returns (bool)
+        returns (uint256 maxAssets)
     {
-        revert("Transfers not supported");
+        State.Data memory state = stateOf[account];
+            
+        if (state.cycle > 0 && state.cycle != IManager(manager).getCurrentCycleIndex())
+            return 0;
+        else
+            return convertToAssets(state.shares);
     }
 
-    function approve(address spender, uint256 coins)
+    /// @inheritdoc IERC4626
+    function previewRequest(uint256 assets)
+        external
+        view
+        returns (uint256 shares)
+    {
+        return convertToShares(assets);
+    }
+
+    /// @inheritdoc IERC4626
+    function request(uint256 assets, address from)
         external
         noauth
-        returns (bool)
+        lock
+        tick(msg.sender)
+        returns (uint256 shares)
     {
-        _approve(msg.sender, spender, coins);
-        return true;
+        require(assets > 0, "Insufficient withdrawal request");
+        require(stateOf[msg.sender].epoch == 0, "Deposit in-process");
+        require(stateOf[msg.sender].cycle == 0 || stateOf[msg.sender].cycle == cycleLock, "Balance withdrawal in-process");
+        uint256 cycleNow = IManager(manager).getCurrentCycleIndex();
+        require(cycleLock <= cycleNow, "Vault withdrawal in-process");
+        _withdrawAll(cycleNow);
+        _decreaseAllowance(from, assets);
+        shares = convertToShares(assets);
+
+        // update state
+        cycleLock = cycleNow + 2;
+        stateOf[msg.sender].cycle = (cycleNow + 2).u32();
+        stateOf[msg.sender].buffer += assets.u96();
+        stateOf[msg.sender].shares -= shares.u96();
+
+        IStaking(staking).requestWithdrawal(assets, 0);
+    }
+
+    /// @inheritdoc IERC4626
+    function maxWithdraw(address account)
+        external
+        view
+        returns (uint256)
+    {
+        uint256 cycle = stateOf[account].cycle;
+            
+        if (cycle > 0 && cycle <= IManager(manager).getCurrentCycleIndex())
+            return stateOf[account].buffer;
+        else
+            return 0;
+    }
+
+    /// @inheritdoc IERC4626
+    function previewWithdraw(uint256 assets)
+        external
+        view
+        returns (uint256 shares)
+    {
+        return convertToShares(assets);
+    }
+
+    /// @inheritdoc IERC4626
+    function withdraw(uint256 assets, address to, address from)
+        external
+        noauth
+        lock
+        tick(msg.sender)
+        returns (uint256)
+    {
+        require(assets > 0, "Insufficient withdrawal");
+        require(stateOf[msg.sender].epoch == 0, "Deposit in-process");
+        uint256 cycleNow = IManager(manager).getCurrentCycleIndex();
+        require(stateOf[msg.sender].cycle <= cycleNow, "Invalid cycle");
+        _withdrawAll(cycleNow);
+        _decreaseAllowance(from, assets);
+        
+        stateOf[msg.sender].buffer -= assets.u96();
+
+        if (stateOf[msg.sender].buffer == 0)
+            stateOf[msg.sender].cycle = 0;
+
+        asset.safeTransfer(to, assets);
+
+        return 0;
     }
 
     /**
      * Views
      */
 
+    /// @inheritdoc IRecyclerVaultV1StateDerived
     function getState(address account)
         external
         view
@@ -277,6 +374,7 @@ contract RecyclerVaultV1 is ERC1967Implementation, RecyclerStorageV1 {
         return stateOf[account];
     }
 
+    /// @inheritdoc IRecyclerVaultV1StateDerived
     function getEpoch(uint256 index)
         external
         view
@@ -285,6 +383,7 @@ contract RecyclerVaultV1 is ERC1967Implementation, RecyclerStorageV1 {
         return epochOf[index];
     }
 
+    /// @inheritdoc IRecyclerVaultV1StateDerived
     function getRollover()
         external
         view
@@ -297,92 +396,77 @@ contract RecyclerVaultV1 is ERC1967Implementation, RecyclerStorageV1 {
         }
     }
 
-    /**
-     * Actions
-     */
-
-    function deposit(uint256 amount, address to)
-        external
-        noauth
-        lock
-        playback
-        tick(to)
+    /// @inheritdoc IRecyclerVaultV1StateDerived
+    function totalActive()
+        public
+        view
+        returns (uint256)
     {
-        require(amount > dust, "Insufficient deposit");
-        require(amount + _balanceOf(asset, address(this)) <= capacity, "Capacity overflow");
-        // check that current epoch is depositable
-        require(!epochOf[cursor].filled && _blockTimestamp() <= epochOf[cursor].deadline, "Epoch expired");
-        // if a past buffer exists that didn't get cleared by tick, the revert
-        // cannot store to queued deposits at once
-        require(stateOf[to].cycle == 0, "Withdrawal in-process");
-        require(stateOf[to].epoch == cursor || stateOf[to].buffer == 0, "Buffer exists");
-
-        // pull assets
-        asset.safeTransferFrom(msg.sender, address(this), amount);
-
-        // update state
-        epochOf[cursor].buffer += amount.u104();
-        totalBuffer += amount;
-        stateOf[to].epoch = cursor.u32();
-        stateOf[to].buffer += amount.u96();
-
-        IStaking(staking).deposit(amount);
-
-        emit Transfer(address(0), to, amount);
+        uint256 staked = IERC20(staking).balanceOf(address(this));
+        return (staked > totalBuffer) ? staked - totalBuffer : 0;
     }
 
-    function request(uint256 amount)
+    /// @inheritdoc IRecyclerVaultV1StateDerived
+    function totalQueued()
         external
-        noauth
-        lock
-        tick(msg.sender)
+        view
+        returns (uint256)
     {
-        require(amount > 0, "Insufficient withdrawal request");
-        require(stateOf[msg.sender].epoch == 0, "Deposit in-process");
-        require(stateOf[msg.sender].cycle == 0 || stateOf[msg.sender].cycle == cycleLock, "Balance withdrawal in-process");
-        uint256 cycleNow = IManager(manager).getCurrentCycleIndex();
-        require(cycleLock <= cycleNow, "Vault withdrawal in-process");
-        _withdrawAll(cycleNow);
-
-        // update state
-        cycleLock = cycleNow + 2;
-        stateOf[msg.sender].cycle = (cycleNow + 2).u32();
-        stateOf[msg.sender].buffer += amount.u96();
-        stateOf[msg.sender].shares -= convertToShares(amount).u96();
-
-        IStaking(staking).requestWithdrawal(amount, 0);
+        return totalBuffer;
     }
 
-    function withdraw(uint256 amount, address to)
+    /// @inheritdoc IRecyclerVaultV1StateDerived
+    function activeOf(address account)
         external
-        noauth
-        lock
-        tick(msg.sender)
+        view
+        returns (uint256)
     {
-        require(amount > 0, "Insufficient withdrawal");
-        require(stateOf[msg.sender].epoch == 0, "Deposit in-process");
-        uint256 cycleNow = IManager(manager).getCurrentCycleIndex();
-        require(stateOf[msg.sender].cycle <= cycleNow, "Invalid cycle");
-        _withdrawAll(cycleNow);
+        if (totalSupply > 0)
+            return (balanceOf(account) * (totalActive())) / totalSupply;
+        else
+            return 0;
+    }
 
-        stateOf[msg.sender].buffer -= amount.u96();
+    /// @inheritdoc IRecyclerVaultV1StateDerived
+    function queuedOf(address account)
+        external
+        view
+        returns (uint256)
+    {
+        State.Data memory state = _tick(account);
+        
+        if (state.epoch > 0)
+            return state.buffer;
+        else
+            return 0;
+    }
 
-        if (stateOf[msg.sender].buffer == 0)
-            stateOf[msg.sender].cycle = 0;
+    /// @inheritdoc IRecyclerVaultV1StateDerived
+    function requestedOf(address account)
+        external
+        view
+        returns (uint256)
+    {
+        uint256 cycle = stateOf[account].cycle;
 
-        asset.safeTransfer(to, amount);
+        if (cycle > 0 && cycle > IManager(manager).getCurrentCycleIndex())
+            return stateOf[account].buffer;
+        else
+            return 0;
     }
 
     /**
      * Maintainance
      */
 
+    /// @inheritdoc IRecyclerVaultV1Actions
     function poke(address account)
         external
     {
         stateOf[account] = _tick(account);
     }
 
+    /// @inheritdoc IRecyclerVaultV1Actions
     function prepare(uint256 amount)
         public
         auth
@@ -390,6 +474,7 @@ contract RecyclerVaultV1 is ERC1967Implementation, RecyclerStorageV1 {
         IERC20(asset).approve(staking, amount);
     }
 
+    /// @inheritdoc IRecyclerVaultV1Actions
     function next(uint32 deadline)
         public
         auth
@@ -398,6 +483,7 @@ contract RecyclerVaultV1 is ERC1967Implementation, RecyclerStorageV1 {
         epochOf[(id = ++cursor)].deadline = deadline;
     }
 
+    /// @inheritdoc IRecyclerVaultV1Actions
     function fill(uint256 epoch)
         public
         auth
@@ -414,9 +500,10 @@ contract RecyclerVaultV1 is ERC1967Implementation, RecyclerStorageV1 {
     }
 
     /**
-     * Tokemak
+     * External helpers
      */
 
+    /// @inheritdoc IRecyclerVaultV1Actions
     function _vote(IOnChainVoteL1.UserVotePayload calldata data)
         external
         auth
@@ -424,6 +511,7 @@ contract RecyclerVaultV1 is ERC1967Implementation, RecyclerStorageV1 {
         IOnChainVoteL1(onchainvote).vote(data);
     }
 
+    /// @inheritdoc IRecyclerVaultV1Actions
     function _claim(IRewards.Recipient memory recipient, uint8 v, bytes32 r, bytes32 s)
         external
         auth
@@ -431,6 +519,7 @@ contract RecyclerVaultV1 is ERC1967Implementation, RecyclerStorageV1 {
         IRewards(rewards).claim(recipient, v, r, s);
     }
 
+    /// @inheritdoc IRecyclerVaultV1Actions
     function _deposit(uint256 amount)
         external
         auth
@@ -438,6 +527,7 @@ contract RecyclerVaultV1 is ERC1967Implementation, RecyclerStorageV1 {
         IStaking(staking).deposit(amount);
     }
 
+    /// @inheritdoc IRecyclerVaultV1Actions
     function _requestWithdrawal(uint256 amount)
         external
         auth
@@ -445,6 +535,7 @@ contract RecyclerVaultV1 is ERC1967Implementation, RecyclerStorageV1 {
         IStaking(staking).requestWithdrawal(amount, 0);
     }
 
+    /// @inheritdoc IRecyclerVaultV1Actions
     function _withdraw(uint256 amount)
         external
         auth
@@ -452,6 +543,7 @@ contract RecyclerVaultV1 is ERC1967Implementation, RecyclerStorageV1 {
         IStaking(staking).withdraw(amount);
     }
 
+    /// @inheritdoc IRecyclerVaultV1Actions
     function _withdrawAll(uint256 currentCycle)
         public
         returns (uint256)
@@ -467,6 +559,7 @@ contract RecyclerVaultV1 is ERC1967Implementation, RecyclerStorageV1 {
         }
     }
 
+    /// @inheritdoc IRecyclerVaultV1Actions
     function _depositWithFee(uint256 amount)
         public
         auth
@@ -503,10 +596,11 @@ contract RecyclerVaultV1 is ERC1967Implementation, RecyclerStorageV1 {
     }
 
     /**
-     * Internal
+     * Internal helpers
      */
     
-    /// @notice Ticks an account if there's clearable buffer.
+    /// @notice Returns a ticked account.
+    /// @dev Increases shares and removes buffer, if clearable.
     function _tick(address account)
         internal
         view
@@ -566,6 +660,7 @@ contract RecyclerVaultV1 is ERC1967Implementation, RecyclerStorageV1 {
         return uint32(block.timestamp);
     }
 
+    /// @dev Important to authorize the upgrades.
     function _authorizeUpgrade(address newImplementation)
         internal
         override

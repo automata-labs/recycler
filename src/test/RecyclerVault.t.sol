@@ -301,9 +301,9 @@ contract RecyclerVaultTest is DSTest, Utilities {
         recycler.next(_deadline(1));
         recycler.deposit(1e18, address(this));
         recycler.fill(1);
-        recycler.request(1e18);
+        recycler.request(1e18, address(this));
         realloc_current_cycle_index(203);
-        recycler.withdraw(1e18, address(this));
+        recycler.withdraw(1e18, address(this), address(this));
 
         assertEq(toke.balanceOf(address(recycler)), 0);
         assertEq(toke.balanceOf(address(this)), 1e18);
@@ -316,9 +316,9 @@ contract RecyclerVaultTest is DSTest, Utilities {
         recycler.next(_deadline(1));
         recycler.deposit(1e18, address(this));
         recycler.fill(1);
-        recycler.request(1e18);
+        recycler.request(1e18, address(this));
         expectRevert("Invalid cycle");
-        recycler.withdraw(1e18, address(this));
+        recycler.withdraw(1e18, address(this), address(this));
     }
 
     function testWithdrawOverflow() public {
@@ -327,15 +327,15 @@ contract RecyclerVaultTest is DSTest, Utilities {
         recycler.next(_deadline(1));
         recycler.deposit(1e18, address(this));
         recycler.fill(1);
-        recycler.request(1e18);
+        recycler.request(1e18, address(this));
         realloc_current_cycle_index(203);
         expectRevert(abi.encodeWithSignature("Panic(uint256)", 0x11));
-        recycler.withdraw(1e18 + 1, address(this));
+        recycler.withdraw(1e18 + 1, address(this), address(this));
     }
 
     function testWithdrawOnEmpty() public {
         expectRevert(abi.encodeWithSignature("Panic(uint256)", 0x11));
-        recycler.withdraw(1, address(this));
+        recycler.withdraw(1, address(this), address(this));
     }
 
     function testWithdrawAmountZero() public {
@@ -344,10 +344,10 @@ contract RecyclerVaultTest is DSTest, Utilities {
         recycler.next(_deadline(1));
         recycler.deposit(1e18, address(this));
         recycler.fill(1);
-        recycler.request(1e18);
+        recycler.request(1e18, address(this));
         realloc_current_cycle_index(203);
         expectRevert("Insufficient withdrawal");
-        recycler.withdraw(0, address(this));
+        recycler.withdraw(0, address(this), address(this));
     }
 
     /**

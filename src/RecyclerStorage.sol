@@ -4,13 +4,14 @@ pragma solidity =0.8.10;
 import { IERC20 } from "yield-utils-v2/token/IERC20.sol";
 import { IERC20Metadata } from "yield-utils-v2/token/IERC20Metadata.sol";
 
+import { IERC4626 } from "./interfaces/IERC4626.sol";
 import { Epoch } from "./libraries/data/Epoch.sol";
 import { State } from "./libraries/data/State.sol";
 import { Auth } from "./libraries/Auth.sol";
 import { Lock } from "./libraries/Lock.sol";
 import { Pause } from "./libraries/Pause.sol";
 
-abstract contract RecyclerStorageV1 is Auth, Pause, Lock, IERC20, IERC20Metadata {
+abstract contract RecyclerStorageV1 is Auth, Pause, Lock, IERC20, IERC20Metadata, IERC4626 {
     using State for State.Data;
 
     /// @notice Emitted when asset is set.
@@ -43,11 +44,6 @@ abstract contract RecyclerStorageV1 is Auth, Pause, Lock, IERC20, IERC20Metadata
     /// @notice Emitted when fee is set.
     /// @param fee The set fee value.
     event SetFee(uint256 fee);
-
-    /// @notice Throws when the epoch parameters is invalid (0).
-    error InvalidEpoch();
-    /// @notice Throws when the fee is set over 100%.
-    error InvalidFee();
 
     /// @notice The max fee that can be set.
     uint256 internal constant MAX_FEE = 1e4;
@@ -155,9 +151,7 @@ abstract contract RecyclerStorageV1 is Auth, Pause, Lock, IERC20, IERC20Metadata
         external
         auth
     {
-        if (epoch == 0)
-            revert InvalidEpoch();
-
+        require(epoch > 0, "Invalid epoch");
         epochOf[epoch].deadline = deadline;
         emit SetDeadline(epoch, deadline);
     }
@@ -174,9 +168,7 @@ abstract contract RecyclerStorageV1 is Auth, Pause, Lock, IERC20, IERC20Metadata
         external
         auth
     {
-        if (fee_ > CAP_FEE)
-            revert InvalidFee();
-
+        require(fee <= CAP_FEE, "Fee overflow");
         fee = fee_;
         emit SetFee(fee);
     }
