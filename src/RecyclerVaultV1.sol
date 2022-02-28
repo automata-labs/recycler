@@ -208,7 +208,7 @@ contract RecyclerVaultV1 is ERC1967Implementation, RecyclerStorageV1 {
         IOnChainVoteL1(onchainvote).vote(data);
     }
 
-    function claim(IRewards.Recipient memory recipient, uint8 v, bytes32 r, bytes32 s) external auth {
+    function claim(IRewards.Recipient memory recipient, uint8 v, bytes32 r, bytes32 s) public auth {
         IRewards(rewards).claim(recipient, v, r, s);
     }
 
@@ -216,8 +216,17 @@ contract RecyclerVaultV1 is ERC1967Implementation, RecyclerStorageV1 {
         IStaking(staking).deposit(assets);
     }
 
-    function unstake(uint256 assets) public auth {
-        IStaking(staking).withdraw(assets);
+    function rollover(
+        IRewards.Recipient memory recipient,
+        uint8 v,
+        bytes32 r,
+        bytes32 s,
+        uint32 deadline_
+    ) external auth {
+        claim(recipient, v, r, s);
+        stake(_balanceOf(asset, address(this)));
+        deadline = deadline_;
+        emit SetDeadline(deadline);
     }
 
     /**
