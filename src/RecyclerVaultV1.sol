@@ -9,17 +9,15 @@ import { IManager } from "./interfaces/external/IManager.sol";
 import { IOnChainVoteL1 } from "./interfaces/external/IOnChainVoteL1.sol";
 import { IRewards } from "./interfaces/external/IRewards.sol";
 import { IStaking } from "./interfaces/external/IStaking.sol";
-import {
-    IRecyclerVaultV1,
-    IRecyclerVaultV1Actions,
-    IRecyclerVaultV1StateDerived
-} from "./interfaces/v1/IRecyclerVaultV1.sol";
+import { IRecyclerVaultV1 } from "./interfaces/v1/IRecyclerVaultV1.sol";
+import { IRecyclerVaultV1Actions } from "./interfaces/v1/IRecyclerVaultV1Actions.sol";
+import { IRecyclerVaultV1StateDerived } from "./interfaces/v1/IRecyclerVaultV1StateDerived.sol";
 import { IERC4626 } from "./interfaces/IERC4626.sol";
 import { Epoch } from "./libraries/data/Epoch.sol";
 import { State } from "./libraries/data/State.sol";
 import { Cast } from "./libraries/Cast.sol";
 import { SafeTransfer } from "./libraries/SafeTransfer.sol";
-import { RecyclerStorageV1 } from "./RecyclerStorage.sol";
+import { RecyclerStorageV1 } from "./RecyclerStorageV1.sol";
 
 contract RecyclerVaultV1 is IRecyclerVaultV1, ERC1967Implementation, RecyclerStorageV1 {
     using Cast for uint256;

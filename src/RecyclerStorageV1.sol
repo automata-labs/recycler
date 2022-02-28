@@ -2,8 +2,10 @@
 pragma solidity =0.8.10;
 
 import { IERC20 } from "yield-utils-v2/token/IERC20.sol";
-import { IERC20Metadata } from "yield-utils-v2/token/IERC20Metadata.sol";
 
+import { IRecyclerStorageV1 } from "./interfaces/v1/IRecyclerStorageV1.sol";
+import { IRecyclerStorageV1Actions } from "./interfaces/v1/IRecyclerStorageV1Actions.sol";
+import { IRecyclerStorageV1State } from "./interfaces/v1/IRecyclerStorageV1State.sol";
 import { IERC4626 } from "./interfaces/IERC4626.sol";
 import { Epoch } from "./libraries/data/Epoch.sol";
 import { State } from "./libraries/data/State.sol";
@@ -11,7 +13,7 @@ import { Auth } from "./libraries/Auth.sol";
 import { Lock } from "./libraries/Lock.sol";
 import { Pause } from "./libraries/Pause.sol";
 
-abstract contract RecyclerStorageV1 is Auth, Pause, Lock, IERC20, IERC20Metadata, IERC4626 {
+abstract contract RecyclerStorageV1 is IRecyclerStorageV1, Auth, Pause, Lock {
     using State for State.Data;
 
     /// @notice Emitted when asset is set.
@@ -50,47 +52,48 @@ abstract contract RecyclerStorageV1 is Auth, Pause, Lock, IERC20, IERC20Metadata
     /// @notice The capped fee at 10%.
     uint256 internal constant CAP_FEE = 1e3;
 
-    /// @notice The Tokemak token.
+    /// @inheritdoc IERC4626
     address public asset;
-    /// @notice The Tokemak staking contract.
+    /// @inheritdoc IRecyclerStorageV1State
     address public staking;
-    /// @notice The On-chain voting contract.
+    /// @inheritdoc IRecyclerStorageV1State
     address public onchainvote;
-    /// @notice The Rewards contract.
+    /// @inheritdoc IRecyclerStorageV1State
     address public rewards;
-    /// @notice The Manager contract.
+    /// @inheritdoc IRecyclerStorageV1State
     address public manager;
 
-    /// @notice The min deposit of the vault.
+    /// @inheritdoc IRecyclerStorageV1State
     uint256 public dust;
-    /// @notice The max capacity of the vault.
+    /// @inheritdoc IRecyclerStorageV1State
     uint256 public capacity;
-    /// @notice The current epoch id.
+    /// @inheritdoc IRecyclerStorageV1State
     uint256 public cursor;
-    /// @notice The maintainer of the vault.
+    /// @inheritdoc IRecyclerStorageV1State
+    uint256 public fee;
+    /// @inheritdoc IRecyclerStorageV1State
     /// @dev Receives the fee when calling `claim`, if non-zero.
     address public maintainer;
-    /// @notice The fee paid to the maintainer.
-    uint256 public fee;
-    /// @notice The last used min cycle index for withdrawal.
+    /// @inheritdoc IRecyclerStorageV1State
     uint256 public cycleLock;
 
-    /// @notice The total amount of shares issued.
+    /// @inheritdoc IERC20
     uint256 public totalSupply;
-    /// @notice The total amount of tokens being buffered into shares.
+    /// @inheritdoc IRecyclerStorageV1State
     uint256 public totalBuffer;
 
-    /// @notice The mapping of states for every account.
+    /// @inheritdoc IRecyclerStorageV1State
     mapping(address => State.Data) public stateOf;
-    /// @notice The mapping of epochs.
+    /// @inheritdoc IRecyclerStorageV1State
     mapping(uint256 => Epoch.Data) public epochOf;
-    /// @inheritdoc IERC20
+    /// @inheritdoc IERC20
     mapping(address => mapping(address => uint256)) public allowance;
 
     /**
      * Setters
      */
 
+    /// @inheritdoc IRecyclerStorageV1Actions
     function setAsset(address asset_)
         external
         auth
@@ -99,6 +102,7 @@ abstract contract RecyclerStorageV1 is Auth, Pause, Lock, IERC20, IERC20Metadata
         emit SetAsset(asset);
     }
 
+    /// @inheritdoc IRecyclerStorageV1Actions
     function setStaking(address staking_)
         external
         auth
@@ -107,6 +111,7 @@ abstract contract RecyclerStorageV1 is Auth, Pause, Lock, IERC20, IERC20Metadata
         emit SetStaking(staking);
     }
 
+    /// @inheritdoc IRecyclerStorageV1Actions
     function setOnChainVote(address onchainvote_)
         external
         auth
@@ -115,6 +120,7 @@ abstract contract RecyclerStorageV1 is Auth, Pause, Lock, IERC20, IERC20Metadata
         emit SetOnChainVote(onchainvote);
     }
 
+    /// @inheritdoc IRecyclerStorageV1Actions
     function setRewards(address rewards_)
         external
         auth
@@ -123,6 +129,7 @@ abstract contract RecyclerStorageV1 is Auth, Pause, Lock, IERC20, IERC20Metadata
         emit SetRewards(rewards);
     }
 
+    /// @inheritdoc IRecyclerStorageV1Actions
     function setManager(address manager_)
         external
         auth
@@ -131,6 +138,7 @@ abstract contract RecyclerStorageV1 is Auth, Pause, Lock, IERC20, IERC20Metadata
         emit SetManager(manager);
     }
 
+    /// @inheritdoc IRecyclerStorageV1Actions
     function setDust(uint256 dust_)
         external
         auth
@@ -139,6 +147,7 @@ abstract contract RecyclerStorageV1 is Auth, Pause, Lock, IERC20, IERC20Metadata
         emit SetDust(dust);
     }
 
+    /// @inheritdoc IRecyclerStorageV1Actions
     function setCapacity(uint256 capacity_)
         external
         auth
@@ -147,6 +156,7 @@ abstract contract RecyclerStorageV1 is Auth, Pause, Lock, IERC20, IERC20Metadata
         emit SetCapacity(dust);
     }
 
+    /// @inheritdoc IRecyclerStorageV1Actions
     function setDeadline(uint256 epoch, uint32 deadline)
         external
         auth
@@ -156,6 +166,7 @@ abstract contract RecyclerStorageV1 is Auth, Pause, Lock, IERC20, IERC20Metadata
         emit SetDeadline(epoch, deadline);
     }
 
+    /// @inheritdoc IRecyclerStorageV1Actions
     function setMaintainer(address maintainer_)
         external
         auth
@@ -164,6 +175,7 @@ abstract contract RecyclerStorageV1 is Auth, Pause, Lock, IERC20, IERC20Metadata
         emit SetMaintainer(maintainer);
     }
 
+    /// @inheritdoc IRecyclerStorageV1Actions
     function setFee(uint256 fee_)
         external
         auth

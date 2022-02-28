@@ -4,12 +4,12 @@ pragma solidity =0.8.10;
 import { DSTest } from "ds-test/test.sol";
 
 import { RecyclerProxy } from "../RecyclerProxy.sol";
-import { RecyclerVaultV1 } from "../RecyclerVault.sol";
+import { RecyclerVaultV1 } from "../RecyclerVaultV1.sol";
 import { Utilities } from "./utils/Utilities.sol";
 
 contract User {}
 
-contract RecyclerVaultTest is DSTest, Utilities {
+contract RecyclerVaultV1Test is DSTest, Utilities {
     RecyclerVaultV1 public implementationV1;
     RecyclerVaultV1 public recycler;
 
