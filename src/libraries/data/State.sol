@@ -8,7 +8,7 @@ library State {
     using Cast for uint256;
 
     struct Data {
-        uint32 epoch; // epoch that was deposited into
+        uint16 epoch; // epoch that was deposited into
         uint32 cycle; // cycle which withdraw can be called
         // if epoch > 0, then deposit buffer
         // if cycle > 0, then withdrawal buffer

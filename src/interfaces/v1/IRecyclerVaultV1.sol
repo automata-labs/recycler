@@ -11,4 +11,11 @@ interface IRecyclerVaultV1 is
     IRecyclerVaultV1Actions,
     IRecyclerVaultV1Events,
     IRecyclerVaultV1StateDerived
-{}
+{
+    /// @dev Extension of EIP-4626 (not included in the formal specification).
+    function maxRequest(address account) external view returns (uint256 maxAssets);
+    /// @dev Extension of EIP-4626 (not included in the formal specification).
+    function previewRequest(uint256 assets) external view returns (uint256 shares);
+    /// @dev Extension of EIP-4626 (not included in the formal specification).
+    function request(uint256 assets, address from) external returns (uint256 shares);
+}
