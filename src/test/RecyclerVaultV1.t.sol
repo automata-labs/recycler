@@ -4,6 +4,7 @@ pragma solidity =0.8.10;
 import { DSTest } from "ds-test/test.sol";
 
 import { IOnChainVoteL1 } from "../interfaces/external/IOnChainVoteL1.sol";
+import { IRewards } from "../interfaces/external/IRewards.sol";
 import { IRecyclerVaultV0 } from "../interfaces/v0/IRecyclerVaultV0.sol";
 import { Request } from "../libraries/data/Request.sol";
 import { RecyclerProxy } from "../RecyclerProxy.sol";
@@ -56,6 +57,22 @@ contract RecyclerVaultV2Test is DSTest, Utilities {
     }
 
     /**
+     * initialize
+     */
+
+    function testInitializeTwiceRevert() public {
+        expectRevert("Already initialized");
+        recycler.initialize(
+            address(toke),
+            address(staking),
+            address(onchainvote),
+            address(rewards),
+            address(manager),
+            type(uint256).max
+        );
+    }
+
+    /**
      * migrate
      */
 
@@ -79,6 +96,10 @@ contract RecyclerVaultV2Test is DSTest, Utilities {
         stopPrank();
 
         assertEq(toke.balanceOf(address(this)), 42228252390386429484);
+
+        // should fail when migrating twice
+        expectRevert("Already migrated");
+        recycler.migrate();
     }
 
     /**
@@ -167,13 +188,18 @@ contract RecyclerVaultV2Test is DSTest, Utilities {
         recycler.deposit(1, address(this));
     }
 
-    // function testDepositDeadlineRevert() public {
-    //     realloc_toke(address(this), 10e18);
-    //     recycler.setCapacity(1e18);
+    function testDepositCycleSyncRevert() public {
+        realloc_toke(address(this), 10e18);
+        recycler.setCapacity(1e18);
 
-    //     expectRevert("Deadline");
-    //     recycler.deposit(1, address(this));
-    // }
+        realloc_current_cycle_index(202);
+        expectRevert("Cycle not synchronized");
+        recycler.deposit(1e18, address(this));
+
+        recycler.rollover();
+        recycler.deposit(1e18, address(this));
+        assertEq(recycler.assetsOf(address(this)), 1e18);
+    }
 
     function testDepositFailedTransferRevert() public {
         recycler.setCapacity(1e18);
@@ -493,5 +519,101 @@ contract RecyclerVaultV2Test is DSTest, Utilities {
         });
 
         recycler.vote(data);
+    }
+
+    /**
+     * `claim`
+     */
+
+    function testClaim() public {
+        realloc_reward_signer(keyPair.publicKey);
+
+        (IRewards.Recipient memory recipient, uint8 v, bytes32 r, bytes32 s) =
+            buildRecipient(1, 181, address(recycler), 1e18, keyPair.privateKey);
+
+        assertEq(toke.balanceOf(address(recycler)), 0);
+        recycler.claim(recipient.chainId, recipient.cycle, recipient.wallet, recipient.amount, v, r, s);
+        assertEq(toke.balanceOf(address(recycler)), 1e18);
+    }
+
+    function testClaimTwice() public {
+        realloc_reward_signer(keyPair.publicKey);
+
+        IRewards.Recipient memory recipient;
+        uint8 v;
+        bytes32 r;
+        bytes32 s;
+
+        // claim again, w/ 1e18
+        (recipient, v, r, s) = buildRecipient(1, 181, address(recycler), 1e18, keyPair.privateKey);
+        recycler.claim(recipient.chainId, recipient.cycle, recipient.wallet, recipient.amount, v, r, s);
+
+        // claim again, w/ 3e18
+        (recipient, v, r, s) = buildRecipient(1, 181, address(recycler), 3e18, keyPair.privateKey);
+        recycler.claim(recipient.chainId, recipient.cycle, recipient.wallet, recipient.amount, v, r, s);
+
+        // NOTE: the claimable amount is cumulative, so final amount should be 3e18
+        assertEq(toke.balanceOf(address(recycler)), 3e18);
+    }
+
+    /**
+     * rollover
+     */
+
+    function testRollover() public {
+        realloc_toke(address(this), 10e18);
+
+        recycler.deposit(1e18, address(this));
+        assertEq(recycler.balanceOf(address(this)), 1e18);
+        assertEq(recycler.assetsOf(address(this)), 1e18);
+        assertEq(recycler.totalSupply(), 1e18);
+
+        assertEq(recycler.totalSupplyCache(), 0);
+        assertEq(recycler.totalAssetsCache(), 0);
+        assertEq(recycler.cycle(), 201);
+
+        realloc_current_cycle_index(202);
+        recycler.rollover();
+
+        assertEq(recycler.totalSupplyCache(), 1e18);
+        assertEq(recycler.totalAssetsCache(), 1e18);
+        assertEq(recycler.cycle(), 202);
+    }
+
+    /**
+     * compound
+     */
+
+    function testCompound() public {
+        realloc_reward_signer(keyPair.publicKey);
+        realloc_toke(address(this), 1e18);
+
+        recycler.deposit(1e18, address(this));
+        assertEq(recycler.balanceOf(address(this)), 1e18);
+        assertEq(recycler.assetsOf(address(this)), 1e18);
+        assertEq(recycler.totalSupply(), 1e18);
+
+        realloc_current_cycle_index(202);
+        (IRewards.Recipient memory recipient, uint8 v, bytes32 r, bytes32 s) =
+            buildRecipient(1, 181, address(recycler), 1e18, keyPair.privateKey);
+
+        recycler.compound(recipient.chainId, recipient.cycle, recipient.wallet, recipient.amount, v, r, s);
+
+        assertEq(recycler.totalSupplyCache(), 1e18);
+        assertEq(recycler.totalAssetsCache(), 2e18);
+        assertEq(recycler.cycle(), 202);
+    }
+
+    /**
+     * status
+     */
+
+    function testStatus() public {
+        assertEq(recycler.status(), false);
+        realloc_current_cycle_index(202);
+        assertEq(recycler.status(), true);
+
+        recycler.rollover();
+        assertEq(recycler.status(), false);
     }
 }

@@ -33,6 +33,7 @@ contract RecyclerVaultV1 is IRecyclerVaultV1, ERC1967Implementation, RecyclerSto
         address manager_,
         uint256 capacity_
     ) external auth {
+        require(initialized == false, "Already initialized");
         require(
             asset_ != address(0) &&
             staking_ != address(0) &&
@@ -51,9 +52,14 @@ contract RecyclerVaultV1 is IRecyclerVaultV1, ERC1967Implementation, RecyclerSto
         cycle = _cycle();
 
         give(type(uint256).max);
+
+        initialized = true;
     }
 
     function migrate() external auth {
+        require(initialized == true, "Not initialized");
+        require(migrated == false, "Already migrated");
+
         IRecyclerVaultV0 recyclerV0 = IRecyclerVaultV0(0x707059006C9936d13064F15FA963a528eC98A055);
         address[] memory targets = new address[](1);
         uint256[] memory values = new uint256[](1);
@@ -71,18 +77,10 @@ contract RecyclerVaultV1 is IRecyclerVaultV1, ERC1967Implementation, RecyclerSto
 
         // distribute shares to accounts
         totalSupply +=
-            42000000000000000000 +
-            5000000000000000000 +
-            30562988479619097434 +
-            40606267960675771288 +
-            81396694486252784289 +
-            5500000000000000000 +
-            40665731046031782725 +
-            5000000000000000000 +
-            251655604857061830000 +
-            44191937774658306928 +
-            6490989577432604977 +
-            10596603336256432549;
+            42000000000000000000 + 5000000000000000000  + 30562988479619097434  +
+            40606267960675771288 + 81396694486252784289 + 5500000000000000000   +
+            40665731046031782725 + 5000000000000000000  + 251655604857061830000 +
+            44191937774658306928 + 6490989577432604977  + 10596603336256432549;
         balanceOf[0xf8cdF370f132dEb1eb98600886160ed027707919] = 42000000000000000000;
         balanceOf[0xaB281a90645Cb13E440D4d12E7aA8F1e74ae8459] = 5000000000000000000;
         balanceOf[0xD20d4989F32C31d296673C141Cb02477DE7ADc5e] = 30562988479619097434;
@@ -138,6 +136,8 @@ contract RecyclerVaultV1 is IRecyclerVaultV1, ERC1967Implementation, RecyclerSto
         // update the cache to latest.
         // should only be needed to be set manually once in this migrate.
         cache();
+
+        migrated = true;
     }
 
     /**
@@ -335,8 +335,26 @@ contract RecyclerVaultV1 is IRecyclerVaultV1, ERC1967Implementation, RecyclerSto
     }
 
     /// @inheritdoc IRecyclerVaultV1Actions
-    function claim(IRewards.Recipient memory recipient, uint8 v, bytes32 r, bytes32 s) public auth {
-        IRewards(rewards).claim(recipient, v, r, s);
+    function claim(
+        uint256 chainId_,
+        uint256 cycle_,
+        address wallet_,
+        uint256 amount_,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    ) public auth {
+        IRewards(rewards).claim(
+            IRewards.Recipient({
+                chainId: chainId_,
+                cycle: cycle_,
+                wallet: wallet_,
+                amount: amount_
+            }),
+            v,
+            r,
+            s
+        );
     }
 
     /// @inheritdoc IRecyclerVaultV1Actions
@@ -358,13 +376,17 @@ contract RecyclerVaultV1 is IRecyclerVaultV1, ERC1967Implementation, RecyclerSto
         emit SetCycle(cycle);
     }
 
+    /// @inheritdoc IRecyclerVaultV1Actions
     function compound(
-        IRewards.Recipient memory recipient,
+        uint256 chainId_,
+        uint256 cycle_,
+        address wallet_,
+        uint256 amount_,
         uint8 v,
         bytes32 r,
         bytes32 s
     ) external auth {
-        claim(recipient, v, r, s);
+        claim(chainId_, cycle_, wallet_, amount_, v, r, s);
         stake(_balanceOf(asset, address(this)));
         rollover();
     }

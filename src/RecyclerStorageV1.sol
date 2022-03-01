@@ -54,6 +54,9 @@ abstract contract RecyclerStorageV1 is IRecyclerStorageV1, Auth, Pause, Lock {
     /// @notice The fee capped at 10%.
     uint256 public constant CEIL_FEE = 1e3;
 
+    bool public initialized;
+    bool public migrated;
+
     /// @inheritdoc IERC4626
     address public asset;
     /// @inheritdoc IRecyclerStorageV1

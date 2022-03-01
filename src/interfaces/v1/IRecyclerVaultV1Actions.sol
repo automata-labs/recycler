@@ -27,7 +27,15 @@ interface IRecyclerVaultV1Actions {
     /// @dev Each reactor key will be checked against a mapping to see if it's valid.
     function vote(IOnChainVoteL1.UserVotePayload calldata data) external;
     /// @notice Claim asset rewards.
-    function claim(IRewards.Recipient memory recipient, uint8 v, bytes32 r, bytes32 s) external;
+    function claim(
+        uint256 chainId_,
+        uint256 cycle_,
+        address wallet_,
+        uint256 amount_,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    ) external;
     /// @notice Deposit assets from the vault to the `staking` contract.
     function stake(uint256 assets) external;
     function cache() external;
@@ -37,24 +45,14 @@ interface IRecyclerVaultV1Actions {
     /// @notice Rollover the vault to the next cycle.
     /// @notice Cache the values, claim rewards, stake rewards and set new deadline.
     function compound(
-        IRewards.Recipient memory recipient,
+        uint256 chainId_,
+        uint256 cycle_,
+        address wallet_,
+        uint256 amount_,
         uint8 v,
         bytes32 r,
         bytes32 s
     ) external;
     /// @notice Withdraw all assets possible from the `staking` contract.
     function withdrawAll() external;
-
-    // function _vote(IOnChainVoteL1.UserVotePayload calldata data) external;
-    
-    // function _claim(IRewards.Recipient memory recipient, uint8 v, bytes32 r, bytes32 s) external;
-    
-    // function _deposit(uint256 amount) external;
-    // /// @notice Request withdrawal for assetes from the `staking` contract.
-    // function _requestWithdrawal(uint256 amount) external;
-    // /// @notice Withdraw assets from the `staking` contract.
-    // function _withdraw(uint256 amount) external;
-    // function _withdrawAll(uint256 currentCycle) external returns (uint256);
-    // /// @notice Deposit assetes from the vault, and mint shares for the `maintainer`.
-    // function _depositWithFee(uint256 amount) external;
 }
