@@ -43,6 +43,9 @@ abstract contract RecyclerStorageV1 is Auth, Pause, Lock {
     /// @notice Emitted when maintainer is set.
     /// @param maintainer The set maintainer address.
     event SetMaintainer(address maintainer);
+    /// @notice Emitted when rate is set.
+    /// @param rate The set rate address.
+    event SetRate(uint256 rate);
 
     /// @notice The max rate.
     uint256 public constant UNIT_RATE = 1e18;
@@ -78,6 +81,9 @@ abstract contract RecyclerStorageV1 is Auth, Pause, Lock {
     mapping(address => uint256)      public balanceOf;
     mapping(address => Request.Data) public requestOf;
     mapping(address => mapping(address => uint256)) public allowance;
+
+    uint256 public totalSupplyCache;
+    uint256 public totalAssetsCache;
 
     /**
      * Setters
@@ -132,5 +138,6 @@ abstract contract RecyclerStorageV1 is Auth, Pause, Lock {
     function setRate(uint256 rate_) external auth {
         require(rate_ <= CEIL_RATE, "Rate too large");
         rate = rate_;
+        emit SetRate(rate);
     }
 }

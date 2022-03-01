@@ -128,11 +128,9 @@ contract RecyclerVaultV1 is ERC1967Implementation, RecyclerStorageV1 {
     }
 
     function previewDeposit(uint256 assets) public view returns (uint256 shares) {
-        uint256 _totalAssets = totalAssets();
-
-        if (_totalAssets > 0) {
-            uint256 addend = _totalAssets * rate / UNIT_RATE;
-            uint256 result = assets * totalSupply / (_totalAssets + addend);
+        if (totalAssetsCache > 0) {
+            uint256 addend = totalAssetsCache * rate / UNIT_RATE;
+            uint256 result = assets * totalSupplyCache / (totalAssetsCache + addend);
             shares = (result == 0) ? assets : result;
         } else {
             shares = assets;
@@ -216,6 +214,11 @@ contract RecyclerVaultV1 is ERC1967Implementation, RecyclerStorageV1 {
         IStaking(staking).deposit(assets);
     }
 
+    function cache() public auth {
+        totalSupplyCache = totalSupply;
+        totalAssetsCache = totalAssets();
+    }
+
     function rollover(
         IRewards.Recipient memory recipient,
         uint8 v,
@@ -223,6 +226,7 @@ contract RecyclerVaultV1 is ERC1967Implementation, RecyclerStorageV1 {
         bytes32 s,
         uint32 deadline_
     ) external auth {
+        cache();
         claim(recipient, v, r, s);
         stake(_balanceOf(asset, address(this)));
         deadline = deadline_;

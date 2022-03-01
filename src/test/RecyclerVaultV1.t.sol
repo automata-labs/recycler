@@ -89,6 +89,7 @@ contract RecyclerVaultV2Test is DSTest, Utilities {
     function testDepositWithRate() public {
         realloc_toke(address(user0), 10e18);
         realloc_toke(address(user1), 10e18);
+        realloc_toke(address(user2), 10e18);
         recycler.setRate(6491599622312253);
         recycler.setDeadline(block.timestamp + 1);
 
@@ -98,17 +99,31 @@ contract RecyclerVaultV2Test is DSTest, Utilities {
         assertEq(recycler.balanceOf(address(user0)), 8e18);
         assertEq(recycler.assetsOf(address(user0)), 8e18);
 
+        // deposit w/ rate for user1
+        recycler.cache();
         startPrank(address(user1));
         recycler.deposit(2e18, address(user1));
         stopPrank();
         assertEq(recycler.balanceOf(address(user1)), 1987100538892230720);
         assertEq(recycler.assetsOf(address(user1)), 1989667102232496329);
 
+        // deposit w/ rate for user2
+        startPrank(address(user2));
+        recycler.deposit(2e18, address(user2));
+        stopPrank();
+        assertEq(recycler.balanceOf(address(user2)), 1987100538892230720);
+        assertEq(recycler.assetsOf(address(user2)), 1991381830972121262);
+        // user1's should eq. user2's
+        assertEq(recycler.assetsOf(address(user1)), 1991381830972121262);
+
+        // claim rewards and see that the balance goes back to normal
         uint256 rewards = 8e18 * recycler.rate() / recycler.UNIT_RATE();
         realloc_toke(address(recycler), rewards);
         recycler.stake(rewards);
         assertEq(recycler.balanceOf(address(user1)), 1987100538892230720);
         assertEq(recycler.assetsOf(address(user1)), 1999999999999999999);
+        assertEq(recycler.balanceOf(address(user2)), 1987100538892230720);
+        assertEq(recycler.assetsOf(address(user2)), 1999999999999999999);
     }
 
     /**
