@@ -66,7 +66,6 @@ abstract contract RecyclerStorageV1 is Auth, Pause, Lock {
     uint256 public fee;
     /// @dev Receives the fee when calling `claim`, if non-zero.
     address public maintainer;
-    uint256 public cycleLock;
     /// @notice To give the admin time to rollover the vault.
     uint256 public deadline;
     /// @notice The expected percentage rewards from the next claim.

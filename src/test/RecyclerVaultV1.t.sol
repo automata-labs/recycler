@@ -126,6 +126,69 @@ contract RecyclerVaultV2Test is DSTest, Utilities {
         assertEq(recycler.assetsOf(address(user2)), 1999999999999999999);
     }
 
+    function testDepositZeroRevert() public {
+        expectRevert("Insufficient deposit");
+        recycler.deposit(0, address(this));
+    }
+
+    function testDepositCapacityRevert() public {
+        realloc_toke(address(this), 10e18);
+
+        recycler.setCapacity(0);
+        expectRevert("Capacity overflow");
+        recycler.deposit(1, address(this));
+    }
+
+    function testDepositDeadlineRevert() public {
+        realloc_toke(address(this), 10e18);
+        recycler.setDeadline(0);
+        recycler.setCapacity(1e18);
+
+        expectRevert("Deadline");
+        recycler.deposit(1, address(this));
+    }
+
+    function testDepositFailedTransferRevert() public {
+        recycler.setDeadline(block.timestamp + 100);
+        recycler.setCapacity(1e18);
+
+        expectRevert("SafeTransferFailed");
+        recycler.deposit(1, address(this));
+    }
+
+    function testDepositFailedTransferApproveRevert() public {
+        realloc_toke(address(this), 10e18);
+        toke.approve(address(recycler), 0);
+        recycler.setDeadline(block.timestamp + 100);
+        recycler.setCapacity(1e18);
+
+        expectRevert("SafeTransferFailed");
+        recycler.deposit(1, address(this));
+    }
+
+    function testDepositVaultNotApprovedForStakingRevert() public {
+        realloc_toke(address(this), 10e18);
+        recycler.give(0);
+        recycler.setDeadline(block.timestamp + 100);
+        recycler.setCapacity(1e18);
+
+        expectRevert("ERC20: transfer amount exceeds allowance");
+        recycler.deposit(1e18, address(this));
+    }
+
+    function testDepositWeirdConversionRevert() public {
+        realloc_toke(address(this), 10e18);
+        recycler.setDeadline(block.timestamp + 1);
+
+        recycler.deposit(1e18, address(this));
+        realloc_toke(address(recycler), 100e18);
+        recycler.stake(100e18);
+        recycler.cache();
+
+        expectRevert("Insufficient conversion");
+        recycler.deposit(1, address(this));
+    }
+
     /**
      * request
      */
@@ -142,7 +205,7 @@ contract RecyclerVaultV2Test is DSTest, Utilities {
 
         assertEq(recycler.totalSupply(), 1e18);
         assertEq(recycler.totalAssets(), 1e18);
-        assertEq(requestOf(address(this)).cycle, 203);
+        assertEq(requestOf(address(this)).cycle, 202);
         assertEq(requestOf(address(this)).assets, 1e18);
     }
 
@@ -152,6 +215,7 @@ contract RecyclerVaultV2Test is DSTest, Utilities {
         realloc_toke(address(user1), 10e18);
         recycler.setDeadline(block.timestamp + 1);
 
+        // deposit with user0 and user1
         startPrank(address(user0));
         recycler.deposit(1e18, address(user0));
         stopPrank();
@@ -163,36 +227,77 @@ contract RecyclerVaultV2Test is DSTest, Utilities {
         assertEq(recycler.totalSupply(), 2e18);
         assertEq(recycler.totalAssets(), 2e18);
 
+        // user0 request withdrawal
         startPrank(address(user0));
         recycler.request(5e17, address(user0));
         stopPrank();
 
+        // vault state should not be affected
+        // this is because vault state changes on `withdraw/withdrawAll`, not on `request`
         assertEq(recycler.totalSupply(), 2e18);
         assertEq(recycler.totalAssets(), 2e18);
 
-        realloc_current_cycle_index(203);
+        // user1 request withdraw after cycle lock
+        // this should also trigger a withdrawAll, and change the vault state
+        realloc_current_cycle_index(202);
         startPrank(address(user1));
         recycler.request(7e17, address(user1));
         stopPrank();
 
+        // check vault state
         assertEq(recycler.totalSupply(), 1e18 + 5e17);
         assertEq(recycler.totalAssets(), 1e18 + 5e17);
-
-        // check vault state
         assertEq(toke.balanceOf(address(recycler)), 5e17);
-        assertEq(recycler.cycleLock(), 205);
 
         // check user state
         // user0
         assertEq(recycler.balanceOf(address(user0)), 5e17);
-        assertEq(requestOf(address(user0)).cycle, 203);
+        assertEq(requestOf(address(user0)).cycle, 202);
         assertEq(requestOf(address(user0)).assets, 5e17);
         assertEq(recycler.assetsOf(address(user0)), 5e17);
+        assertEq(recycler.maxWithdraw(address(user0)), 5e17);
         // user1
         assertEq(recycler.balanceOf(address(user1)), 3e17);
-        assertEq(requestOf(address(user1)).cycle, 205);
+        assertEq(requestOf(address(user1)).cycle, 203);
         assertEq(requestOf(address(user1)).assets, 7e17);
         assertEq(recycler.assetsOf(address(user1)), 3e17);
+        assertEq(recycler.maxWithdraw(address(user1)), 0);
+
+        // fast-forward and now user1's withdrawal should also show up
+        realloc_current_cycle_index(203);
+        assertEq(recycler.maxWithdraw(address(user1)), 7e17);
+
+        // try withdrawing
+        startPrank(address(user0));
+        recycler.withdraw(recycler.maxWithdraw(address(user0)), address(user0), address(user0));
+        stopPrank();
+        startPrank(address(user1));
+        recycler.withdraw(recycler.maxWithdraw(address(user1)), address(user1), address(user1));
+        stopPrank();
+
+        assertEq(toke.balanceOf(address(user0)), 9e18 + 5e17);
+        assertEq(toke.balanceOf(address(user1)), 9e18 + 7e17);
+        assertEq(requestOf(address(user0)).cycle, 0);
+        assertEq(requestOf(address(user0)).assets, 0);
+        assertEq(requestOf(address(user1)).cycle, 0);
+        assertEq(requestOf(address(user1)).assets, 0);
+    }
+    
+    function testRequestEmptyVaultWeirdConversionRevert() public {
+        expectRevert("Insufficient conversion");
+        recycler.request(1e18, address(this));
+    }
+
+    function testRequestNotEnoughApprovedRevert() public {
+        realloc_toke(address(user0), 10e18);
+        recycler.setDeadline(block.timestamp + 1);
+
+        startPrank(address(user0));
+        recycler.deposit(1e18, address(user0));
+        stopPrank();
+
+        expectRevert(abi.encodeWithSignature("Panic(uint256)", 0x11));
+        recycler.request(1e18, address(user0));
     }
 
     /**
@@ -205,7 +310,7 @@ contract RecyclerVaultV2Test is DSTest, Utilities {
 
         recycler.deposit(1e18, address(this));
         recycler.request(1e18, address(this));
-        realloc_current_cycle_index(203); // current cycle is 201, change into 203
+        realloc_current_cycle_index(202); // current cycle is 201, change into 202
         recycler.withdraw(1e18, address(this), address(this));
 
         assertEq(toke.balanceOf(address(this)), 10e18);
@@ -213,5 +318,124 @@ contract RecyclerVaultV2Test is DSTest, Utilities {
         assertEq(requestOf(address(this)).cycle, 0);
         assertEq(requestOf(address(this)).assets, 0);
         assertEq(recycler.assetsOf(address(this)), 0);
+    }
+
+    function testWithdrawMultipleUsers() public {
+        realloc_toke(address(user0), 10e18);
+        realloc_toke(address(user1), 10e18);
+        realloc_toke(address(user2), 10e18);
+        recycler.setDeadline(block.timestamp + 10);
+
+        // deposit user0
+        startPrank(address(user0));
+        recycler.deposit(1e18, address(user0));
+        stopPrank();
+
+        // deposit user1
+        startPrank(address(user1));
+        recycler.deposit(3e18, address(user1));
+        stopPrank();
+
+        // deposit user2
+        startPrank(address(user2));
+        recycler.deposit(6e18, address(user2));
+        stopPrank();
+
+        realloc_toke(address(recycler), 10e18);
+        recycler.stake(10e18);
+
+        // request user0
+        assertEq(recycler.maxRequest(address(user0)), 2e18);
+        startPrank(address(user0));
+        recycler.request(2e18, address(user0));
+        stopPrank();
+
+        // request user1
+        assertEq(recycler.maxRequest(address(user1)), 6e18);
+        startPrank(address(user1));
+        recycler.request(6e18, address(user1));
+        stopPrank();
+
+        // check user0
+        assertEq(recycler.balanceOf(address(user0)), 0);
+        assertEq(recycler.assetsOf(address(user0)), 0);
+        assertEq(recycler.maxWithdraw(address(user0)), 0);
+        assertEq(requestOf(address(user0)).cycle, 202);
+        assertEq(requestOf(address(user0)).assets, 2e18);
+
+        // check user1
+        assertEq(recycler.balanceOf(address(user1)), 0);
+        assertEq(recycler.assetsOf(address(user1)), 0);
+        assertEq(recycler.maxWithdraw(address(user1)), 0);
+        assertEq(requestOf(address(user1)).cycle, 202);
+        assertEq(requestOf(address(user1)).assets, 6e18);
+
+        realloc_current_cycle_index(202);
+
+        // check vault
+        assertEq(recycler.buffer(), 4e18); // this is shares
+
+        assertEq(recycler.maxWithdraw(address(user0)), 2e18);
+        startPrank(address(user0));
+        recycler.withdraw(2e18, address(user0), address(user0));
+        stopPrank();
+        assertEq(toke.balanceOf(address(user0)), 11e18);
+
+        assertEq(recycler.maxWithdraw(address(user1)), 6e18);
+        startPrank(address(user1));
+        recycler.withdraw(6e18, address(user1), address(user1));
+        stopPrank();
+        assertEq(toke.balanceOf(address(user1)), 13e18);
+
+        // check vault after
+        assertEq(recycler.buffer(), 0);
+    }
+
+    function testWithdrawInFutureCycle() public {
+        realloc_toke(address(user0), 10e18);
+        realloc_toke(address(user1), 10e18);
+        realloc_toke(address(user2), 10e18);
+        recycler.setDeadline(block.timestamp + 10);
+
+        // deposit user0
+        startPrank(address(user0));
+        recycler.deposit(1e18, address(user0));
+        stopPrank();
+
+        // deposit user1
+        startPrank(address(user1));
+        recycler.deposit(3e18, address(user1));
+        stopPrank();
+
+        // deposit user2
+        startPrank(address(user2));
+        recycler.deposit(6e18, address(user2));
+        stopPrank();
+
+        // simulated claim
+        realloc_toke(address(recycler), 10e18);
+        recycler.stake(10e18);
+
+        // request user0
+        startPrank(address(user0));
+        recycler.request(recycler.maxRequest(address(user0)), address(user0));
+        stopPrank();
+
+        // fast-forward cycle
+        realloc_current_cycle_index(202);
+
+        // request user1
+        startPrank(address(user1));
+        recycler.request(recycler.maxRequest(address(user1)), address(user1));
+        stopPrank();
+
+        // fast-forward cycle
+        realloc_current_cycle_index(203);
+
+        startPrank(address(user0));
+        recycler.withdraw(recycler.maxWithdraw(address(user0)), address(user0), address(user0));
+        stopPrank();
+
+        assertEq(toke.balanceOf(address(user0)), 11e18);
     }
 }

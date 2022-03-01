@@ -110,35 +110,43 @@ contract RecyclerVaultV1 is ERC1967Implementation, RecyclerStorageV1 {
             assets = 0;
     }
 
-    function maxDeposit(address) external view returns (uint256 maxAssets) {
-        return capacity - totalAssets();
+    function maxDeposit(address) external view returns (uint256 assets) {
+        assets = capacity - totalAssets();
     }
 
-    function maxRequest(address account) external view returns (uint256) {
-        return convertToAssets(balanceOf[account]);
+    function maxRequest(address account) external view returns (uint256 assets) {
+        assets = convertToAssets(balanceOf[account]);
     }
 
-    function maxWithdraw(address account) external view returns (uint256) {
+    function maxWithdraw(address account) external view returns (uint256 assets) {
         uint256 cycleNow = IManager(manager).getCurrentCycleIndex();
 
         if (requestOf[account].cycle <= cycleNow)
-            return requestOf[account].assets;
+            assets = requestOf[account].assets;
         else
-            return 0;
+            assets = 0;
     }
 
     function previewDeposit(uint256 assets) public view returns (uint256 shares) {
-        if (totalAssetsCache > 0) {
-            uint256 addend = totalAssetsCache * rate / UNIT_RATE;
-            uint256 result = assets * totalSupplyCache / (totalAssetsCache + addend);
-            shares = (result == 0) ? assets : result;
-        } else {
+        if (totalSupply == 0 || totalSupplyCache == 0) {
             shares = assets;
+        } else {
+            if (totalAssetsCache > 0) {
+                uint256 addend = totalAssetsCache * rate / UNIT_RATE;
+                shares = assets * totalSupplyCache / (totalAssetsCache + addend);
+            } else {
+                shares = 0;
+            }
         }
     }
 
     function previewRequest(uint256 assets) public view returns (uint256 shares) {
-        shares = convertToShares(assets);
+        uint256 _totalAssets = totalAssets();
+
+        if (_totalAssets > 0)
+            shares = assets * totalSupply / _totalAssets;
+        else
+            shares = 0;
     }
 
     function previewWithdraw(uint256) public pure returns (uint256 shares) {
@@ -149,49 +157,45 @@ contract RecyclerVaultV1 is ERC1967Implementation, RecyclerStorageV1 {
         require(assets > 0, "Insufficient deposit");
         require(assets + _balanceOf(staking, address(this)) <= capacity, "Capacity overflow");
         require(block.timestamp <= deadline, "Deadline");
+        require((shares = previewDeposit(assets)) > 0, "Insufficient conversion");
+        _pay(asset, msg.sender, address(this), assets);
 
-        shares = previewDeposit(assets);
-        asset.safeTransferFrom(msg.sender, address(this), assets);
-
-        _deposit(assets);
         totalSupply += shares;
         balanceOf[to] += shares;
+
+        _deposit(assets);
     }
 
     function request(uint256 assets, address from) external playback lock returns (uint256 shares) {
         require(assets > 0, "Insufficient request");
-        uint256 cycleNow = IManager(manager).getCurrentCycleIndex();
-        require(cycleLock == cycleNow + 2 || cycleLock <= cycleNow, "Vault locked");
-        require(requestOf[from].cycle == 0 || requestOf[from].cycle == cycleNow, "Withdrawal processing");
-
-        shares = previewRequest(assets);
+        (uint256 lastCycle, uint256 lockCycle, uint256 requested) = _withdrawStatus();
+        require(lockCycle == lastCycle + 1 || lockCycle <= lastCycle, "Vault locked");
+        require((shares = previewRequest(assets)) > 0, "Insufficient conversion");
         _decreaseAllowance(from, shares);
-        _withdrawAll(cycleNow);
+        _withdrawAll(lastCycle, lockCycle, requested);
 
         // vault effects
-        cycleLock = cycleNow + 2;
         buffer += shares;
         // user effects
         balanceOf[from] -= shares;
-        requestOf[from].cycle = (cycleNow + 2).u32();
+        requestOf[from].cycle = (lastCycle + 1).u32();
         requestOf[from].assets += assets.u224();
 
-        _requestWithdrawal(assets);
+        _requestWithdrawal(requested + assets);
     }
 
     function withdraw(uint256 assets, address to, address from) external playback lock returns (uint256 shares) {
         require(assets > 0, "Insufficient withdrawable");
-        uint256 cycleNow = IManager(manager).getCurrentCycleIndex();
-        require(requestOf[from].cycle <= cycleNow, "Withdraw not matured");
-
-        shares = 0;
+        (uint256 lastCycle, uint256 lockCycle, uint256 requested) = _withdrawStatus();
+        require(requestOf[from].cycle <= lastCycle, "Withdraw not matured");
+        shares = previewWithdraw(assets);
         _decreaseAllowance(from, shares);
-        _withdrawAll(cycleNow);
+        _withdrawAll(lastCycle, lockCycle, requested);
 
         requestOf[from].assets -= assets.u224();
         requestOf[from].cycle = (requestOf[from].assets == 0) ? 0 : requestOf[from].cycle;
 
-        asset.safeTransfer(to, assets);
+        _pay(asset, address(this), to, assets);
     }
 
     /**
@@ -217,6 +221,7 @@ contract RecyclerVaultV1 is ERC1967Implementation, RecyclerStorageV1 {
     function cache() public auth {
         totalSupplyCache = totalSupply;
         totalAssetsCache = totalAssets();
+        // missing event
     }
 
     function rollover(
@@ -226,11 +231,17 @@ contract RecyclerVaultV1 is ERC1967Implementation, RecyclerStorageV1 {
         bytes32 s,
         uint32 deadline_
     ) external auth {
+        // cache first as rewards should not be included in the slippage when depositing
         cache();
         claim(recipient, v, r, s);
         stake(_balanceOf(asset, address(this)));
         deadline = deadline_;
         emit SetDeadline(deadline);
+    }
+
+    function withdrawAll() external auth {
+        (uint256 lastCycle, uint256 lockCycle, uint256 cycleAssets) = _withdrawStatus();
+        _withdrawAll(lastCycle, lockCycle, cycleAssets);
     }
 
     /**
@@ -244,24 +255,49 @@ contract RecyclerVaultV1 is ERC1967Implementation, RecyclerStorageV1 {
     function _requestWithdrawal(uint256 assets) internal {
         IStaking(staking).requestWithdrawal(assets, 0);
     }
+    
+    function _withdrawStatus() internal view returns (uint256, uint256, uint256) {
+        (uint256 lockCycle, uint256 requestedAssets) =
+            IStaking(staking).withdrawalRequestsByIndex(address(this), 0);
+        return (IManager(manager).getCurrentCycleIndex(), lockCycle, requestedAssets);
+    }
 
-    function _withdrawAll(uint256 currentCycle) internal returns (uint256 assets) {
-        uint256 cycle;
-        (cycle, assets) = IStaking(staking).withdrawalRequestsByIndex(address(this), 0);
-
-        if (currentCycle >= cycle && assets > 0) {
+    function _withdrawAll(uint256 cycleNow, uint256 cycleLock, uint256 withdrawable) internal {
+        if (cycleLock <= cycleNow && 0 < withdrawable) {
             // remove shares from `totalSupply` here because staking `balanceOf` only decreases
             // after calling `withdraw`
             totalSupply -= buffer;
             delete buffer;
             // withdraw tokens from staking, which also decreases this contract's `balanceOf`
-            IStaking(staking).withdraw(assets);
+            IStaking(staking).withdraw(withdrawable);
         }
     }
 
     /**
      * Internal helpers
      */
+
+    /// @notice Helper function for transferring tokens.
+    function _pay(address token, address from, address to, uint256 amount) internal {
+        if (from == address(this))
+            token.safeTransfer(to, amount);
+        else
+            token.safeTransferFrom(from, to, amount);
+    }
+
+    /// @notice Returns the block timestamp casted to `uint32`.
+    function _blockTimestamp() internal view returns (uint32) {
+        return uint32(block.timestamp);
+    }
+
+    /// @notice The balance of a token for this contract.
+    function _balanceOf(address token, address account) internal view returns (uint256 balance) {
+        (bool success, bytes memory returndata) = token.staticcall(
+            abi.encodeWithSelector(IERC20.balanceOf.selector, account)
+        );
+        require(success && returndata.length >= 32);
+        balance = abi.decode(returndata, (uint256));
+    }
 
     /// @notice Helper approve function.
     function _approve(address owner, address spender, uint256 coins) internal {
@@ -277,20 +313,6 @@ contract RecyclerVaultV1 is ERC1967Implementation, RecyclerStorageV1 {
                 _approve(from, msg.sender, allowed - coins);
             }
         }
-    }
-
-    /// @notice The balance of a token for this contract.
-    function _balanceOf(address token, address account) internal view returns (uint256 balance) {
-        (bool success, bytes memory returndata) = token.staticcall(
-            abi.encodeWithSelector(IERC20.balanceOf.selector, account)
-        );
-        require(success && returndata.length >= 32);
-        balance = abi.decode(returndata, (uint256));
-    }
-
-    /// @notice Returns the block timestamp casted to `uint32`.
-    function _blockTimestamp() internal view returns (uint32) {
-        return uint32(block.timestamp);
     }
 
     /// @dev Important to authorize the upgrades.
