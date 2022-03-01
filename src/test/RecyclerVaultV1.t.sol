@@ -101,7 +101,9 @@ contract RecyclerVaultV2Test is DSTest, Utilities {
         assertEq(recycler.assetsOf(address(user0)), 8e18);
 
         // deposit w/ rate for user1
-        recycler.cache();
+        // increment cycle to trigger new cache
+        realloc_current_cycle_index(202);
+
         startPrank(address(user1));
         recycler.deposit(2e18, address(user1));
         stopPrank();
@@ -184,7 +186,8 @@ contract RecyclerVaultV2Test is DSTest, Utilities {
         recycler.deposit(1e18, address(this));
         realloc_toke(address(recycler), 100e18);
         recycler.stake(100e18);
-        recycler.cache();
+        // trigger new cache
+        realloc_current_cycle_index(202);
 
         expectRevert("Insufficient conversion");
         recycler.deposit(1, address(this));

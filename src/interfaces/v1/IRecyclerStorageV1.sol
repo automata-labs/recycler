@@ -28,6 +28,9 @@ interface IRecyclerStorageV1 is IERC20, IERC20Metadata, IERC4626 {
     /// @notice The amount of shares being prepared to be removed on withdrawal.
     /// @dev This relates to how the staking contract updates `balanceOf` on withdrawal, not on request.
     function buffer() external view returns (uint256);
+    /// @notice Returns the last observed cycle index.
+    /// @dev When the cycle changes, cache is called
+    function cycle() external view returns (uint256);
     /// @notice The fee paid to the maintainer.
     function fee() external view returns (uint256);
     /// @notice The maintainer of the vault.

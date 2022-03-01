@@ -33,8 +33,10 @@ abstract contract RecyclerStorageV1 is IRecyclerStorageV1, Auth, Pause, Lock {
     /// @notice Emitted when capacity is set.
     /// @param capacity The set capacity value.
     event SetCapacity(uint256 capacity);
-    /// @notice Emitted when a new deadline is set for an epoch
+    /// @notice Emitted when a new deadline is set.
     event SetDeadline(uint256 deadline);
+    /// @notice Emitted when a new cycle is force-set.
+    event SetCycle(uint256 cycle);
     /// @notice Emitted when fee is set.
     /// @param fee The set fee value.
     event SetFee(uint256 fee);
@@ -73,6 +75,8 @@ abstract contract RecyclerStorageV1 is IRecyclerStorageV1, Auth, Pause, Lock {
     uint256 public rate;
     /// @inheritdoc IRecyclerStorageV1
     uint256 public buffer;
+    /// @inheritdoc IRecyclerStorageV1
+    uint256 public cycle;
     /// @inheritdoc IRecyclerStorageV1
     uint256 public fee;
     /// @inheritdoc IRecyclerStorageV1
@@ -135,6 +139,11 @@ abstract contract RecyclerStorageV1 is IRecyclerStorageV1, Auth, Pause, Lock {
     function setDeadline(uint256 deadline_) external auth {
         deadline = deadline_;
         emit SetDeadline(deadline);
+    }
+
+    function setCycle(uint256 cycle_) external auth {
+        cycle = cycle_;
+        emit SetCycle(cycle);
     }
 
     /// @inheritdoc IRecyclerStorageV1

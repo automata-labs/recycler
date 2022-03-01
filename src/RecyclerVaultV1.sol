@@ -9,6 +9,7 @@ import { IManager } from "./interfaces/external/IManager.sol";
 import { IOnChainVoteL1 } from "./interfaces/external/IOnChainVoteL1.sol";
 import { IRewards } from "./interfaces/external/IRewards.sol";
 import { IStaking } from "./interfaces/external/IStaking.sol";
+import { ITokeMigrationPool } from "./interfaces/external/ITokeMigrationPool.sol";
 import { IRecyclerVaultV1 } from "./interfaces/v1/IRecyclerVaultV1.sol";
 import { IRecyclerVaultV1Actions } from "./interfaces/v1/IRecyclerVaultV1Actions.sol";
 import { IRecyclerVaultV1StateDerived } from "./interfaces/v1/IRecyclerVaultV1StateDerived.sol";
@@ -49,6 +50,7 @@ contract RecyclerVaultV1 is IRecyclerVaultV1, ERC1967Implementation, RecyclerSto
         rewards = rewards_;
         manager = manager_;
         capacity = capacity_;
+        cycle = _cycle();
     }
 
     /**
@@ -92,13 +94,13 @@ contract RecyclerVaultV1 is IRecyclerVaultV1, ERC1967Implementation, RecyclerSto
      */
 
     /// @inheritdoc IERC4626
-    function totalAssets() public view returns (uint256) {
-        return IERC20(staking).balanceOf(address(this));
+    function totalAssets() public view returns (uint256 assets) {
+        assets = IERC20(staking).balanceOf(address(this));
     }
 
     /// @inheritdoc IERC4626
-    function assetsOf(address account) external view returns (uint256) {
-        return convertToAssets(balanceOf[account]);
+    function assetsOf(address account) external view returns (uint256 assets) {
+        assets = convertToAssets(balanceOf[account]);
     }
 
     /// @inheritdoc IERC4626
@@ -122,8 +124,14 @@ contract RecyclerVaultV1 is IRecyclerVaultV1, ERC1967Implementation, RecyclerSto
     }
 
     /// @inheritdoc IERC4626
-    function maxDeposit(address) external view returns (uint256 assets) {
-        assets = capacity - totalAssets();
+    function maxDeposit(address account) external view returns (uint256 assets) {
+        uint256 balance = _balanceOf(asset, account);
+        uint256 remaining = capacity - totalAssets();
+
+        if (balance > remaining)
+            assets = remaining;
+        else
+            assets = balance;
     }
 
     /// @inheritdoc IRecyclerVaultV1StateDerived
@@ -175,6 +183,8 @@ contract RecyclerVaultV1 is IRecyclerVaultV1, ERC1967Implementation, RecyclerSto
         require(assets > 0, "Insufficient deposit");
         require(assets + _balanceOf(staking, address(this)) <= capacity, "Capacity overflow");
         require(block.timestamp <= deadline, "Deadline");
+
+        _cache();
         require((shares = previewDeposit(assets)) > 0, "Insufficient conversion");
         _pay(asset, msg.sender, address(this), assets);
 
@@ -245,17 +255,13 @@ contract RecyclerVaultV1 is IRecyclerVaultV1, ERC1967Implementation, RecyclerSto
         IStaking(staking).deposit(assets);
     }
 
+    function withdrawAndMigrate(address pool) external auth {
+        ITokeMigrationPool(pool).withdrawAndMigrate();
+    }
+
     /// @inheritdoc IRecyclerVaultV1Actions
     function cache() public auth {
-        totalSupplyCache = totalSupply;
-        totalAssetsCache = totalAssets();
-
-        emit Cached(
-            msg.sender,
-            IManager(manager).getCurrentCycleIndex(),
-            totalSupplyCache,
-            totalAssetsCache
-        );
+        _cache();
     }
 
     /// @inheritdoc IRecyclerVaultV1Actions
@@ -301,6 +307,22 @@ contract RecyclerVaultV1 is IRecyclerVaultV1, ERC1967Implementation, RecyclerSto
         IStaking(staking).requestWithdrawal(assets, 0);
     }
     
+    function _cycle() internal view returns (uint256) {
+        return IManager(manager).getCurrentCycleIndex();
+    }
+
+    function _cache() internal {
+        uint256 cycle_ = _cycle();
+
+        if (cycle < cycle_) {
+            totalSupplyCache = totalSupply;
+            totalAssetsCache = totalAssets();
+            cycle = cycle_;
+            emit SetCycle(cycle);
+            emit Cached(msg.sender, cycle, totalSupplyCache, totalAssetsCache);
+        }
+    }
+
     function _withdrawStatus() internal view returns (uint256, uint256, uint256) {
         (uint256 lockCycle, uint256 requestedAssets) =
             IStaking(staking).withdrawalRequestsByIndex(address(this), 0);
