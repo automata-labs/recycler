@@ -3,6 +3,7 @@ pragma solidity =0.8.10;
 
 import { DSTest } from "ds-test/test.sol";
 
+import { IOnChainVoteL1 } from "../interfaces/external/IOnChainVoteL1.sol";
 import { Request } from "../libraries/data/Request.sol";
 import { RecyclerProxy } from "../RecyclerProxy.sol";
 import { RecyclerVaultV1 } from "../RecyclerVaultV1.sol";
@@ -437,5 +438,42 @@ contract RecyclerVaultV2Test is DSTest, Utilities {
         stopPrank();
 
         assertEq(toke.balanceOf(address(user0)), 11e18);
+    }
+
+    /**
+     * give
+     */
+
+     function testGive() public {
+        recycler.give(type(uint256).max - 1);
+        assertEq(toke.allowance(address(recycler), address(staking)), type(uint256).max - 1);
+    }
+
+    // should revert because msg.sender is not auth:ed for recycler
+    function testGiveUnauthorizedError() public {
+        startPrank(address(user0));
+        expectRevert("Denied");
+        recycler.give(0);
+    }
+
+    /**
+     * vote
+     */
+
+    function testVote() public {
+        IOnChainVoteL1.UserVoteAllocationItem[] memory allocations = new IOnChainVoteL1.UserVoteAllocationItem[](3);
+        allocations[0] = IOnChainVoteL1.UserVoteAllocationItem({ reactorKey: bytes32("tcr-default"), amount: 1e18 });
+        allocations[1] = IOnChainVoteL1.UserVoteAllocationItem({ reactorKey: bytes32("fxs-default"), amount: 3e18 });
+        allocations[2] = IOnChainVoteL1.UserVoteAllocationItem({ reactorKey: bytes32("eth-default"), amount: 2e18 });
+        IOnChainVoteL1.UserVotePayload memory data = IOnChainVoteL1.UserVotePayload({
+            account: address(recycler),
+            voteSessionKey: 0x00000000000000000000000000000000000000000000000000000000000000ba,
+            nonce: 0,
+            chainId: uint256(137),
+            totalVotes: 6e18,
+            allocations: allocations
+        });
+
+        recycler.vote(data);
     }
 }
