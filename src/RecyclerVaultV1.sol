@@ -10,6 +10,7 @@ import { IOnChainVoteL1 } from "./interfaces/external/IOnChainVoteL1.sol";
 import { IRewards } from "./interfaces/external/IRewards.sol";
 import { IStaking } from "./interfaces/external/IStaking.sol";
 import { ITokeMigrationPool } from "./interfaces/external/ITokeMigrationPool.sol";
+import { IRecyclerVaultV0 } from "./interfaces/v0/IRecyclerVaultV0.sol";
 import { IRecyclerVaultV1 } from "./interfaces/v1/IRecyclerVaultV1.sol";
 import { IRecyclerVaultV1Actions } from "./interfaces/v1/IRecyclerVaultV1Actions.sol";
 import { IRecyclerVaultV1StateDerived } from "./interfaces/v1/IRecyclerVaultV1StateDerived.sol";
@@ -31,10 +32,7 @@ contract RecyclerVaultV1 is IRecyclerVaultV1, ERC1967Implementation, RecyclerSto
         address rewards_,
         address manager_,
         uint256 capacity_
-    )
-        external
-        auth
-    {
+    ) external auth {
         require(
             asset_ != address(0) &&
             staking_ != address(0) &&
@@ -51,6 +49,95 @@ contract RecyclerVaultV1 is IRecyclerVaultV1, ERC1967Implementation, RecyclerSto
         manager = manager_;
         capacity = capacity_;
         cycle = _cycle();
+
+        give(type(uint256).max);
+    }
+
+    function migrate() external auth {
+        IRecyclerVaultV0 recyclerV0 = IRecyclerVaultV0(0x707059006C9936d13064F15FA963a528eC98A055);
+        address[] memory targets = new address[](1);
+        uint256[] memory values = new uint256[](1);
+        bytes[] memory datas = new bytes[](1);
+
+        // transfer in all tTOKE
+        uint256 balance = IERC20(0xa760e26aA76747020171fCF8BdA108dFdE8Eb930).balanceOf(address(recyclerV0));
+        targets[0] = 0xa760e26aA76747020171fCF8BdA108dFdE8Eb930;
+        values[0] = 0;
+        datas[0] = abi.encodeWithSignature("transfer(address,uint256)", address(this), balance);
+        recyclerV0.execute(targets, values, datas);
+
+        // unwrap tTOKE into TOKE and stake
+        ITokeMigrationPool(0xa760e26aA76747020171fCF8BdA108dFdE8Eb930).withdrawAndMigrate();
+
+        // distribute shares to accounts
+        totalSupply +=
+            42000000000000000000 +
+            5000000000000000000 +
+            30562988479619097434 +
+            40606267960675771288 +
+            81396694486252784289 +
+            5500000000000000000 +
+            40665731046031782725 +
+            5000000000000000000 +
+            251655604857061830000 +
+            44191937774658306928 +
+            6490989577432604977 +
+            10596603336256432549;
+        balanceOf[0xf8cdF370f132dEb1eb98600886160ed027707919] = 42000000000000000000;
+        balanceOf[0xaB281a90645Cb13E440D4d12E7aA8F1e74ae8459] = 5000000000000000000;
+        balanceOf[0xD20d4989F32C31d296673C141Cb02477DE7ADc5e] = 30562988479619097434;
+        balanceOf[0xc244dD4f34A0d5EDc7aF3565b2ab72dD76Ef78e9] = 40606267960675771288;
+        balanceOf[0x2809D5D8f8771c9278DdF0A2D452501ACe7d790A] = 81396694486252784289;
+        balanceOf[0x5f73a24771940b8c80b3570694072f606DF913cc] = 5500000000000000000;
+        balanceOf[0xC8ecE128e77dFe3a3Bbd2c7d54101f2238F8b611] = 40665731046031782725;
+        balanceOf[0x38430336153468dcf36Af5cea7D6bc472425633A] = 5000000000000000000;
+        balanceOf[0x5f7CA8a9775fF2A7008dDA02683d2aE2BD3671a9] = 251655604857061830000;
+        balanceOf[0xAB12253171A0d73df64B115cD43Fe0A32Feb9dAA] = 44191937774658306928;
+        balanceOf[0xbF133C1763c0751494CE440300fCd6b8c4e80D83] = 6490989577432604977;
+        balanceOf[0xA908Af6fD5E61360e24FcA8C8fa6755786409cCe] = 10596603336256432549;
+        emit Transfer(address(0), 0xf8cdF370f132dEb1eb98600886160ed027707919, 42000000000000000000);
+        emit Transfer(address(0), 0xaB281a90645Cb13E440D4d12E7aA8F1e74ae8459, 5000000000000000000);
+        emit Transfer(address(0), 0xD20d4989F32C31d296673C141Cb02477DE7ADc5e, 30562988479619097434);
+        emit Transfer(address(0), 0xc244dD4f34A0d5EDc7aF3565b2ab72dD76Ef78e9, 40606267960675771288);
+        emit Transfer(address(0), 0x2809D5D8f8771c9278DdF0A2D452501ACe7d790A, 81396694486252784289);
+        emit Transfer(address(0), 0x5f73a24771940b8c80b3570694072f606DF913cc, 5500000000000000000);
+        emit Transfer(address(0), 0xC8ecE128e77dFe3a3Bbd2c7d54101f2238F8b611, 40665731046031782725);
+        emit Transfer(address(0), 0x38430336153468dcf36Af5cea7D6bc472425633A, 5000000000000000000);
+        emit Transfer(address(0), 0x5f7CA8a9775fF2A7008dDA02683d2aE2BD3671a9, 251655604857061830000);
+        emit Transfer(address(0), 0xAB12253171A0d73df64B115cD43Fe0A32Feb9dAA, 44191937774658306928);
+        emit Transfer(address(0), 0xbF133C1763c0751494CE440300fCd6b8c4e80D83, 6490989577432604977);
+        emit Transfer(address(0), 0xA908Af6fD5E61360e24FcA8C8fa6755786409cCe, 10596603336256432549);
+
+        // claim TOKE on the recycler
+        targets[0] = rewards;
+        values[0] = 0;
+        datas[0] = abi.encodeWithSignature(
+            "claim((uint256,uint256,address,uint256),uint8,bytes32,bytes32)",
+            IRewards.Recipient({
+                chainId: uint256(1),
+                cycle: uint256(200),
+                wallet: address(0x707059006C9936d13064F15FA963a528eC98A055),
+                amount: uint256(3063292820952196327)
+            }),
+            uint8(27),
+            bytes32(0x05c8f5b4eb854c339bc62195e4c71d20c7227f1f3b9f66fc783ff77bc6d1e28c),
+            bytes32(0x4e5fd565df9d3f3ace0f43d5abbc4cb87a093877ef188d7846de43132ddd334b)
+        );
+        recyclerV0.execute(targets, values, datas);
+
+        // transfer TOKE into this contract
+        balance = IERC20(asset).balanceOf(address(recyclerV0));
+        targets[0] = asset;
+        values[0] = 0;
+        datas[0] = abi.encodeWithSignature("transfer(address,uint256)", address(this), balance);
+        recyclerV0.execute(targets, values, datas);
+
+        // stake the TOKE on this contract
+        _deposit(balance);
+
+        // update the cache to latest.
+        // should only be needed to be set manually once in this migrate.
+        cache();
     }
 
     /**
@@ -150,6 +237,8 @@ contract RecyclerVaultV1 is IRecyclerVaultV1, ERC1967Implementation, RecyclerSto
     }
 
     /// @inheritdoc IERC4626
+    /// @dev This function calculates based on cached values of `totalSupply` and `totalAssets`.
+    /// The cached values 
     function previewDeposit(uint256 assets) public view returns (uint256 shares) {
         if (totalSupply == 0 || totalSupplyCache == 0) {
             shares = assets;
@@ -182,9 +271,7 @@ contract RecyclerVaultV1 is IRecyclerVaultV1, ERC1967Implementation, RecyclerSto
     function deposit(uint256 assets, address to) external playback lock returns (uint256 shares) {
         require(assets > 0, "Insufficient deposit");
         require(assets + _balanceOf(staking, address(this)) <= capacity, "Capacity overflow");
-        require(block.timestamp <= deadline, "Deadline");
-
-        _cache();
+        require(cycle == _cycle(), "Cycle not synchronized");
         require((shares = previewDeposit(assets)) > 0, "Insufficient conversion");
         _pay(asset, msg.sender, address(this), assets);
 
@@ -192,6 +279,7 @@ contract RecyclerVaultV1 is IRecyclerVaultV1, ERC1967Implementation, RecyclerSto
         balanceOf[to] += shares;
 
         _deposit(assets);
+        emit Transfer(address(0), to, shares);
         emit Deposit(msg.sender, to, assets, shares);
     }
 
@@ -212,6 +300,7 @@ contract RecyclerVaultV1 is IRecyclerVaultV1, ERC1967Implementation, RecyclerSto
         requestOf[from].assets += assets.u224();
 
         _requestWithdrawal(requested + assets);
+        emit Transfer(from, address(0), shares);
         emit Request(msg.sender, from, assets, shares);
     }
 
@@ -236,7 +325,7 @@ contract RecyclerVaultV1 is IRecyclerVaultV1, ERC1967Implementation, RecyclerSto
      */
 
     /// @inheritdoc IRecyclerVaultV1Actions
-    function give(uint256 assets) external auth {
+    function give(uint256 assets) public auth {
         IERC20(asset).approve(staking, assets);
     }
 
@@ -255,29 +344,29 @@ contract RecyclerVaultV1 is IRecyclerVaultV1, ERC1967Implementation, RecyclerSto
         IStaking(staking).deposit(assets);
     }
 
-    function withdrawAndMigrate(address pool) external auth {
-        ITokeMigrationPool(pool).withdrawAndMigrate();
-    }
-
     /// @inheritdoc IRecyclerVaultV1Actions
     function cache() public auth {
-        _cache();
+        totalSupplyCache = totalSupply;
+        totalAssetsCache = totalAssets();
+        emit Cached(msg.sender, cycle, totalSupplyCache, totalAssetsCache);
     }
 
     /// @inheritdoc IRecyclerVaultV1Actions
-    function rollover(
+    function rollover() public auth {
+        cache();
+        cycle = _cycle();
+        emit SetCycle(cycle);
+    }
+
+    function compound(
         IRewards.Recipient memory recipient,
         uint8 v,
         bytes32 r,
-        bytes32 s,
-        uint32 deadline_
+        bytes32 s
     ) external auth {
-        // cache first as rewards should not be included in the slippage when depositing
-        cache();
         claim(recipient, v, r, s);
         stake(_balanceOf(asset, address(this)));
-        deadline = deadline_;
-        emit SetDeadline(deadline);
+        rollover();
     }
 
     /// @inheritdoc IRecyclerVaultV1Actions
@@ -288,11 +377,7 @@ contract RecyclerVaultV1 is IRecyclerVaultV1, ERC1967Implementation, RecyclerSto
 
     /// @inheritdoc IRecyclerVaultV1StateDerived
     function status() external view returns (bool) {
-        if (deadline < block.timestamp) {
-            return true;
-        } else {
-            return false;
-        }
+        return (cycle != _cycle());
     }
 
     /**

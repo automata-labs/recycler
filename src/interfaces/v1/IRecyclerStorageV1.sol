@@ -18,8 +18,6 @@ interface IRecyclerStorageV1 is IERC20, IERC20Metadata, IERC4626 {
 
     /// @notice The max capacity of the vault.
     function capacity() external view returns (uint256);
-    /// @notice To give the admin time to rollover the vault.
-    function deadline() external view returns (uint256);
     /// @notice The expected percentage rewards from the next claim.
     /// @dev The parameters is used to decrease the minted shares on deposit. This prevents the
     /// attack where users can deposit right before the rollover and withdraw soonly after to earn 
@@ -52,8 +50,10 @@ interface IRecyclerStorageV1 is IERC20, IERC20Metadata, IERC4626 {
     function setRewards(address rewards_) external;
     function setManager(address manager_) external;
     function setCapacity(uint256 capacity_) external;
-    function setDeadline(uint256 deadline_) external;
+    function setCycle(uint256 cycle_) external;
+    function setRate(uint256 rate_) external;
     function setMaintainer(address maintainer_) external;
     function setFee(uint256 fee_) external;
-    function setRate(uint256 rate_) external;
+    function setTotalSupplyCache(uint256 totalSupplyCache_) external;
+    function setTotalAssetsCache(uint256 totalAssetsCache_) external;
 }

@@ -33,8 +33,6 @@ abstract contract RecyclerStorageV1 is IRecyclerStorageV1, Auth, Pause, Lock {
     /// @notice Emitted when capacity is set.
     /// @param capacity The set capacity value.
     event SetCapacity(uint256 capacity);
-    /// @notice Emitted when a new deadline is set.
-    event SetDeadline(uint256 deadline);
     /// @notice Emitted when a new cycle is force-set.
     event SetCycle(uint256 cycle);
     /// @notice Emitted when fee is set.
@@ -69,8 +67,6 @@ abstract contract RecyclerStorageV1 is IRecyclerStorageV1, Auth, Pause, Lock {
 
     /// @inheritdoc IRecyclerStorageV1
     uint256 public capacity;
-    /// @inheritdoc IRecyclerStorageV1
-    uint256 public deadline;
     /// @inheritdoc IRecyclerStorageV1
     uint256 public rate;
     /// @inheritdoc IRecyclerStorageV1
@@ -136,14 +132,16 @@ abstract contract RecyclerStorageV1 is IRecyclerStorageV1, Auth, Pause, Lock {
     }
 
     /// @inheritdoc IRecyclerStorageV1
-    function setDeadline(uint256 deadline_) external auth {
-        deadline = deadline_;
-        emit SetDeadline(deadline);
-    }
-
     function setCycle(uint256 cycle_) external auth {
         cycle = cycle_;
         emit SetCycle(cycle);
+    }
+
+    /// @inheritdoc IRecyclerStorageV1
+    function setRate(uint256 rate_) external auth {
+        require(rate_ <= CEIL_RATE, "Rate too large");
+        rate = rate_;
+        emit SetRate(rate);
     }
 
     /// @inheritdoc IRecyclerStorageV1
@@ -160,9 +158,12 @@ abstract contract RecyclerStorageV1 is IRecyclerStorageV1, Auth, Pause, Lock {
     }
 
     /// @inheritdoc IRecyclerStorageV1
-    function setRate(uint256 rate_) external auth {
-        require(rate_ <= CEIL_RATE, "Rate too large");
-        rate = rate_;
-        emit SetRate(rate);
+    function setTotalSupplyCache(uint256 totalSupplyCache_) external auth {
+        totalSupplyCache = totalSupplyCache_;
+    }
+
+    /// @inheritdoc IRecyclerStorageV1
+    function setTotalAssetsCache(uint256 totalAssetsCache_) external auth {
+        totalAssetsCache = totalAssetsCache_;
     }
 }

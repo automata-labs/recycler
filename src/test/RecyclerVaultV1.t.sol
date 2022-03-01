@@ -4,6 +4,7 @@ pragma solidity =0.8.10;
 import { DSTest } from "ds-test/test.sol";
 
 import { IOnChainVoteL1 } from "../interfaces/external/IOnChainVoteL1.sol";
+import { IRecyclerVaultV0 } from "../interfaces/v0/IRecyclerVaultV0.sol";
 import { Request } from "../libraries/data/Request.sol";
 import { RecyclerProxy } from "../RecyclerProxy.sol";
 import { RecyclerVaultV1 } from "../RecyclerVaultV1.sol";
@@ -18,10 +19,6 @@ contract RecyclerVaultV2Test is DSTest, Utilities {
     User public user0;
     User public user1;
     User public user2;
-
-    function _deadline(uint32 extra) internal view returns (uint32) {
-        return uint32(block.timestamp) + extra;
-    }
 
     function requestOf(address account) internal view returns (Request.Data memory) {
         (uint32 cycle, uint224 assets) = recycler.requestOf(account);
@@ -58,9 +55,38 @@ contract RecyclerVaultV2Test is DSTest, Utilities {
         stopPrank();
     }
 
+    /**
+     * migrate
+     */
+
+    function testMigrate() public {
+        startPrank(0x7955e5db4327A7C530c5AdCA39575a44982f0793);
+        recyclerV0.allow(address(recycler));
+        stopPrank();
+
+        recycler.migrate();
+
+        assertEq(staking.balanceOf(address(recycler)), 566730110338940806517);
+        assertEq(recycler.previewDeposit(1e18), 994594794303199892);
+
+        assertEq(recycler.assetsOf(0xf8cdF370f132dEb1eb98600886160ed027707919), 42228252390386429484);
+        assertEq(recycler.assetsOf(0x5f7CA8a9775fF2A7008dDA02683d2aE2BD3671a9), 253023247556175332776);
+
+        startPrank(0xf8cdF370f132dEb1eb98600886160ed027707919);
+        recycler.request(recycler.maxRequest(0xf8cdF370f132dEb1eb98600886160ed027707919), 0xf8cdF370f132dEb1eb98600886160ed027707919);
+        realloc_current_cycle_index(202);
+        recycler.withdraw(recycler.maxWithdraw(0xf8cdF370f132dEb1eb98600886160ed027707919), address(this), 0xf8cdF370f132dEb1eb98600886160ed027707919);
+        stopPrank();
+
+        assertEq(toke.balanceOf(address(this)), 42228252390386429484);
+    }
+
+    /**
+     * deposit
+     */
+
     function testDeposit() public {
         realloc_toke(address(this), 10e18);
-        recycler.setDeadline(block.timestamp + 1);
 
         recycler.deposit(1e18, address(this));
         assertEq(recycler.balanceOf(address(this)), 1e18);
@@ -72,7 +98,6 @@ contract RecyclerVaultV2Test is DSTest, Utilities {
     function testDepositMultipleUsers() public {
         realloc_toke(address(user0), 10e18);
         realloc_toke(address(user1), 10e18);
-        recycler.setDeadline(block.timestamp + 1);
 
         startPrank(address(user0));
         recycler.deposit(1e18, address(user0));
@@ -92,7 +117,6 @@ contract RecyclerVaultV2Test is DSTest, Utilities {
         realloc_toke(address(user1), 10e18);
         realloc_toke(address(user2), 10e18);
         recycler.setRate(6491599622312253);
-        recycler.setDeadline(block.timestamp + 1);
 
         startPrank(address(user0));
         recycler.deposit(8e18, address(user0));
@@ -103,6 +127,7 @@ contract RecyclerVaultV2Test is DSTest, Utilities {
         // deposit w/ rate for user1
         // increment cycle to trigger new cache
         realloc_current_cycle_index(202);
+        recycler.rollover();
 
         startPrank(address(user1));
         recycler.deposit(2e18, address(user1));
@@ -142,17 +167,15 @@ contract RecyclerVaultV2Test is DSTest, Utilities {
         recycler.deposit(1, address(this));
     }
 
-    function testDepositDeadlineRevert() public {
-        realloc_toke(address(this), 10e18);
-        recycler.setDeadline(0);
-        recycler.setCapacity(1e18);
+    // function testDepositDeadlineRevert() public {
+    //     realloc_toke(address(this), 10e18);
+    //     recycler.setCapacity(1e18);
 
-        expectRevert("Deadline");
-        recycler.deposit(1, address(this));
-    }
+    //     expectRevert("Deadline");
+    //     recycler.deposit(1, address(this));
+    // }
 
     function testDepositFailedTransferRevert() public {
-        recycler.setDeadline(block.timestamp + 100);
         recycler.setCapacity(1e18);
 
         expectRevert("SafeTransferFailed");
@@ -162,7 +185,6 @@ contract RecyclerVaultV2Test is DSTest, Utilities {
     function testDepositFailedTransferApproveRevert() public {
         realloc_toke(address(this), 10e18);
         toke.approve(address(recycler), 0);
-        recycler.setDeadline(block.timestamp + 100);
         recycler.setCapacity(1e18);
 
         expectRevert("SafeTransferFailed");
@@ -172,7 +194,6 @@ contract RecyclerVaultV2Test is DSTest, Utilities {
     function testDepositVaultNotApprovedForStakingRevert() public {
         realloc_toke(address(this), 10e18);
         recycler.give(0);
-        recycler.setDeadline(block.timestamp + 100);
         recycler.setCapacity(1e18);
 
         expectRevert("ERC20: transfer amount exceeds allowance");
@@ -181,13 +202,13 @@ contract RecyclerVaultV2Test is DSTest, Utilities {
 
     function testDepositWeirdConversionRevert() public {
         realloc_toke(address(this), 10e18);
-        recycler.setDeadline(block.timestamp + 1);
 
         recycler.deposit(1e18, address(this));
         realloc_toke(address(recycler), 100e18);
         recycler.stake(100e18);
         // trigger new cache
         realloc_current_cycle_index(202);
+        recycler.rollover();
 
         expectRevert("Insufficient conversion");
         recycler.deposit(1, address(this));
@@ -199,7 +220,6 @@ contract RecyclerVaultV2Test is DSTest, Utilities {
 
     function testRequest() public {
         realloc_toke(address(this), 10e18);
-        recycler.setDeadline(block.timestamp + 1);
 
         recycler.deposit(1e18, address(this));
         recycler.request(1e18, address(this));
@@ -217,7 +237,6 @@ contract RecyclerVaultV2Test is DSTest, Utilities {
     function testRequestReplace() public {
         realloc_toke(address(user0), 10e18);
         realloc_toke(address(user1), 10e18);
-        recycler.setDeadline(block.timestamp + 1);
 
         // deposit with user0 and user1
         startPrank(address(user0));
@@ -294,7 +313,6 @@ contract RecyclerVaultV2Test is DSTest, Utilities {
 
     function testRequestNotEnoughApprovedRevert() public {
         realloc_toke(address(user0), 10e18);
-        recycler.setDeadline(block.timestamp + 1);
 
         startPrank(address(user0));
         recycler.deposit(1e18, address(user0));
@@ -310,7 +328,6 @@ contract RecyclerVaultV2Test is DSTest, Utilities {
 
     function testWithdraw() public {
         realloc_toke(address(this), 10e18);
-        recycler.setDeadline(block.timestamp + 1);
 
         recycler.deposit(1e18, address(this));
         recycler.request(1e18, address(this));
@@ -328,7 +345,6 @@ contract RecyclerVaultV2Test is DSTest, Utilities {
         realloc_toke(address(user0), 10e18);
         realloc_toke(address(user1), 10e18);
         realloc_toke(address(user2), 10e18);
-        recycler.setDeadline(block.timestamp + 10);
 
         // deposit user0
         startPrank(address(user0));
@@ -399,7 +415,6 @@ contract RecyclerVaultV2Test is DSTest, Utilities {
         realloc_toke(address(user0), 10e18);
         realloc_toke(address(user1), 10e18);
         realloc_toke(address(user2), 10e18);
-        recycler.setDeadline(block.timestamp + 10);
 
         // deposit user0
         startPrank(address(user0));

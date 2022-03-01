@@ -32,13 +32,15 @@ interface IRecyclerVaultV1Actions {
     function stake(uint256 assets) external;
     function cache() external;
     /// @notice Rollover the vault to the next cycle.
+    /// @notice Cache the values and sync cycle.
+    function rollover() external;
+    /// @notice Rollover the vault to the next cycle.
     /// @notice Cache the values, claim rewards, stake rewards and set new deadline.
-    function rollover(
+    function compound(
         IRewards.Recipient memory recipient,
         uint8 v,
         bytes32 r,
-        bytes32 s,
-        uint32 deadline_
+        bytes32 s
     ) external;
     /// @notice Withdraw all assets possible from the `staking` contract.
     function withdrawAll() external;

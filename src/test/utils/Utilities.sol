@@ -10,6 +10,7 @@ import "../../interfaces/external/IRewards.sol";
 import "../../interfaces/external/IRewardsHash.sol";
 import "../../interfaces/external/IStaking.sol";
 import "../../interfaces/external/ITokeVotePool.sol";
+import "../../interfaces/v0/IRecyclerVaultV0.sol";
 import "../utils/Vm.sol";
 
 contract Utilities is DSTest, Vm {
@@ -25,6 +26,7 @@ contract Utilities is DSTest, Vm {
 
     IManager public manager = IManager(0xA86e412109f77c45a3BC1c5870b880492Fb86A14);
     IOnChainVoteL1 public onchainvote = IOnChainVoteL1(0x43094eD6D6d214e43C31C38dA91231D2296Ca511);
+    IRecyclerVaultV0 public recyclerV0 = IRecyclerVaultV0(0x707059006C9936d13064F15FA963a528eC98A055);
     IRewards public rewards = IRewards(0x79dD22579112d8a5F7347c5ED7E609e60da713C5);
     IRewardsHash public rewardsHash = IRewardsHash(0x5ec3EC6A8aC774c7d53665ebc5DDf89145d02fB6);
     IStaking public staking = IStaking(0x96F98Ed74639689C3A11daf38ef86E59F43417D3);
