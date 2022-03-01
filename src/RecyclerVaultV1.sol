@@ -18,10 +18,11 @@ import { Cast } from "./libraries/Cast.sol";
 import { SafeTransfer } from "./libraries/SafeTransfer.sol";
 import { RecyclerStorageV1 } from "./RecyclerStorageV1.sol";
 
-contract RecyclerVaultV1 is ERC1967Implementation, RecyclerStorageV1 {
+contract RecyclerVaultV1 is IRecyclerVaultV1, ERC1967Implementation, RecyclerStorageV1 {
     using Cast for uint256;
     using SafeTransfer for address;
 
+    /// @inheritdoc IRecyclerVaultV1Actions
     function initialize(
         address asset_,
         address staking_,
@@ -54,26 +55,32 @@ contract RecyclerVaultV1 is ERC1967Implementation, RecyclerStorageV1 {
      * ERC-20
      */
 
+    /// @inheritdoc IERC20Metadata
     function name() public pure returns (string memory) {
         return "(Re)cycler Staked Tokemak";
     }
 
+    /// @inheritdoc IERC20Metadata
     function symbol() external pure returns (string memory) {
         return "(re)TOKE";
     }
 
+    /// @inheritdoc IERC20Metadata
     function decimals() external pure returns (uint8) {
         return 18;
     }
 
+    /// @inheritdoc IERC20
     function transfer(address, uint256) external pure returns (bool) {
         revert("Transfer not supported");
     }
 
+    /// @inheritdoc IERC20
     function transferFrom(address, address, uint256) external pure returns (bool) {
         revert("Transfer not supported");
     }
 
+    /// @inheritdoc IERC20
     function approve(address spender, uint256 coins) external returns (bool) {
         _approve(msg.sender, spender, coins);
 
@@ -83,15 +90,18 @@ contract RecyclerVaultV1 is ERC1967Implementation, RecyclerStorageV1 {
     /**
      * ERC-4626
      */
-    
+
+    /// @inheritdoc IERC4626
     function totalAssets() public view returns (uint256) {
         return IERC20(staking).balanceOf(address(this));
     }
 
+    /// @inheritdoc IERC4626
     function assetsOf(address account) external view returns (uint256) {
         return convertToAssets(balanceOf[account]);
     }
 
+    /// @inheritdoc IERC4626
     function convertToShares(uint256 assets) public view returns (uint256 shares) {
         uint256 _totalAssets = totalAssets();
 
@@ -103,6 +113,7 @@ contract RecyclerVaultV1 is ERC1967Implementation, RecyclerStorageV1 {
         }
     }
 
+    /// @inheritdoc IERC4626
     function convertToAssets(uint256 shares) public view returns (uint256 assets) {
         if (totalSupply > 0)
             assets = (shares * (totalAssets())) / totalSupply;
@@ -110,14 +121,17 @@ contract RecyclerVaultV1 is ERC1967Implementation, RecyclerStorageV1 {
             assets = 0;
     }
 
+    /// @inheritdoc IERC4626
     function maxDeposit(address) external view returns (uint256 assets) {
         assets = capacity - totalAssets();
     }
 
+    /// @inheritdoc IRecyclerVaultV1StateDerived
     function maxRequest(address account) external view returns (uint256 assets) {
         assets = convertToAssets(balanceOf[account]);
     }
 
+    /// @inheritdoc IERC4626
     function maxWithdraw(address account) external view returns (uint256 assets) {
         uint256 cycleNow = IManager(manager).getCurrentCycleIndex();
 
@@ -127,6 +141,7 @@ contract RecyclerVaultV1 is ERC1967Implementation, RecyclerStorageV1 {
             assets = 0;
     }
 
+    /// @inheritdoc IERC4626
     function previewDeposit(uint256 assets) public view returns (uint256 shares) {
         if (totalSupply == 0 || totalSupplyCache == 0) {
             shares = assets;
@@ -140,6 +155,7 @@ contract RecyclerVaultV1 is ERC1967Implementation, RecyclerStorageV1 {
         }
     }
 
+    /// @inheritdoc IRecyclerVaultV1StateDerived
     function previewRequest(uint256 assets) public view returns (uint256 shares) {
         uint256 _totalAssets = totalAssets();
 
@@ -149,10 +165,12 @@ contract RecyclerVaultV1 is ERC1967Implementation, RecyclerStorageV1 {
             shares = 0;
     }
 
+    /// @inheritdoc IERC4626
     function previewWithdraw(uint256) public pure returns (uint256 shares) {
         shares = 0;
     }
 
+    /// @inheritdoc IERC4626
     function deposit(uint256 assets, address to) external playback lock returns (uint256 shares) {
         require(assets > 0, "Insufficient deposit");
         require(assets + _balanceOf(staking, address(this)) <= capacity, "Capacity overflow");
@@ -166,6 +184,7 @@ contract RecyclerVaultV1 is ERC1967Implementation, RecyclerStorageV1 {
         _deposit(assets);
     }
 
+    /// @inheritdoc IRecyclerVaultV1Actions
     function request(uint256 assets, address from) external playback lock returns (uint256 shares) {
         require(assets > 0, "Insufficient request");
         (uint256 lastCycle, uint256 lockCycle, uint256 requested) = _withdrawStatus();
@@ -184,6 +203,7 @@ contract RecyclerVaultV1 is ERC1967Implementation, RecyclerStorageV1 {
         _requestWithdrawal(requested + assets);
     }
 
+    /// @inheritdoc IERC4626
     function withdraw(uint256 assets, address to, address from) external playback lock returns (uint256 shares) {
         require(assets > 0, "Insufficient withdrawable");
         (uint256 lastCycle, uint256 lockCycle, uint256 requested) = _withdrawStatus();
@@ -202,28 +222,34 @@ contract RecyclerVaultV1 is ERC1967Implementation, RecyclerStorageV1 {
      * Maintainance
      */
 
+    /// @inheritdoc IRecyclerVaultV1Actions
     function give(uint256 assets) external auth {
         IERC20(asset).approve(staking, assets);
     }
 
+    /// @inheritdoc IRecyclerVaultV1Actions
     function vote(IOnChainVoteL1.UserVotePayload calldata data) external auth {
         IOnChainVoteL1(onchainvote).vote(data);
     }
 
+    /// @inheritdoc IRecyclerVaultV1Actions
     function claim(IRewards.Recipient memory recipient, uint8 v, bytes32 r, bytes32 s) public auth {
         IRewards(rewards).claim(recipient, v, r, s);
     }
 
+    /// @inheritdoc IRecyclerVaultV1Actions
     function stake(uint256 assets) public auth {
         IStaking(staking).deposit(assets);
     }
 
+    /// @inheritdoc IRecyclerVaultV1Actions
     function cache() public auth {
         totalSupplyCache = totalSupply;
         totalAssetsCache = totalAssets();
         // missing event
     }
 
+    /// @inheritdoc IRecyclerVaultV1Actions
     function rollover(
         IRewards.Recipient memory recipient,
         uint8 v,
@@ -239,9 +265,19 @@ contract RecyclerVaultV1 is ERC1967Implementation, RecyclerStorageV1 {
         emit SetDeadline(deadline);
     }
 
+    /// @inheritdoc IRecyclerVaultV1Actions
     function withdrawAll() external auth {
         (uint256 lastCycle, uint256 lockCycle, uint256 cycleAssets) = _withdrawStatus();
         _withdrawAll(lastCycle, lockCycle, cycleAssets);
+    }
+
+    /// @inheritdoc IRecyclerVaultV1StateDerived
+    function status() external view returns (bool) {
+        if (deadline < block.timestamp) {
+            return true;
+        } else {
+            return false;
+        }
     }
 
     /**

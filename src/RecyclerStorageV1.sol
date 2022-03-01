@@ -4,8 +4,6 @@ pragma solidity =0.8.10;
 import { IERC20 } from "yield-utils-v2/token/IERC20.sol";
 
 import { IRecyclerStorageV1 } from "./interfaces/v1/IRecyclerStorageV1.sol";
-import { IRecyclerStorageV1Actions } from "./interfaces/v1/IRecyclerStorageV1Actions.sol";
-import { IRecyclerStorageV1State } from "./interfaces/v1/IRecyclerStorageV1State.sol";
 import { IERC4626 } from "./interfaces/IERC4626.sol";
 import { Epoch } from "./libraries/data/Epoch.sol";
 import { Request } from "./libraries/data/Request.sol";
@@ -14,7 +12,7 @@ import { Auth } from "./libraries/Auth.sol";
 import { Lock } from "./libraries/Lock.sol";
 import { Pause } from "./libraries/Pause.sol";
 
-abstract contract RecyclerStorageV1 is Auth, Pause, Lock {
+abstract contract RecyclerStorageV1 is IRecyclerStorageV1, Auth, Pause, Lock {
     using State for State.Data;
 
     /// @notice Emitted when asset is set.
@@ -56,84 +54,103 @@ abstract contract RecyclerStorageV1 is Auth, Pause, Lock {
     /// @notice The fee capped at 10%.
     uint256 public constant CEIL_FEE = 1e3;
 
+    /// @inheritdoc IERC4626
     address public asset;
+    /// @inheritdoc IRecyclerStorageV1
     address public staking;
+    /// @inheritdoc IRecyclerStorageV1
     address public onchainvote;
+    /// @inheritdoc IRecyclerStorageV1
     address public rewards;
+    /// @inheritdoc IRecyclerStorageV1
     address public manager;
 
+    /// @inheritdoc IRecyclerStorageV1
     uint256 public capacity;
-    uint256 public fee;
-    /// @dev Receives the fee when calling `claim`, if non-zero.
-    address public maintainer;
-    /// @notice To give the admin time to rollover the vault.
+    /// @inheritdoc IRecyclerStorageV1
     uint256 public deadline;
-    /// @notice The expected percentage rewards from the next claim.
-    /// @dev The parameters is used to decrease the minted shares on deposit. This prevents the
-    /// attack where users can deposit right before the rollover and withdraw soonly after to earn 
-    /// more rewards than intended.
+    /// @inheritdoc IRecyclerStorageV1
     uint256 public rate;
-    /// @notice Buffered shares that will be removed when withdraw is called on the staking contract.
+    /// @inheritdoc IRecyclerStorageV1
     uint256 public buffer;
+    /// @inheritdoc IRecyclerStorageV1
+    uint256 public fee;
+    /// @inheritdoc IRecyclerStorageV1
+    address public maintainer;
 
+    /// @inheritdoc IERC20
     uint256 public totalSupply;
-    mapping(address => uint256)      public balanceOf;
-    mapping(address => Request.Data) public requestOf;
-    mapping(address => mapping(address => uint256)) public allowance;
-
+    /// @inheritdoc IRecyclerStorageV1
     uint256 public totalSupplyCache;
+    /// @inheritdoc IRecyclerStorageV1
     uint256 public totalAssetsCache;
+    /// @inheritdoc IERC20
+    mapping(address => uint256)      public balanceOf;
+    /// @inheritdoc IRecyclerStorageV1
+    mapping(address => Request.Data) public requestOf;
+    /// @inheritdoc IERC20
+    mapping(address => mapping(address => uint256)) public allowance;
 
     /**
      * Setters
      */
 
+    /// @inheritdoc IRecyclerStorageV1
     function setAsset(address asset_) external auth {
         asset = asset_;
         emit SetAsset(asset);
     }
 
+    /// @inheritdoc IRecyclerStorageV1
     function setStaking(address staking_) external auth {
         staking = staking_;
         emit SetStaking(staking);
     }
 
+    /// @inheritdoc IRecyclerStorageV1
     function setOnChainVote(address onchainvote_) external auth {
         onchainvote = onchainvote_;
         emit SetOnChainVote(onchainvote);
     }
 
+    /// @inheritdoc IRecyclerStorageV1
     function setRewards(address rewards_) external auth {
         rewards = rewards_;
         emit SetRewards(rewards);
     }
 
+    /// @inheritdoc IRecyclerStorageV1
     function setManager(address manager_) external auth {
         manager = manager_;
         emit SetManager(manager);
     }
 
+    /// @inheritdoc IRecyclerStorageV1
     function setCapacity(uint256 capacity_) external auth {
         capacity = capacity_;
         emit SetCapacity(capacity);
     }
 
+    /// @inheritdoc IRecyclerStorageV1
     function setDeadline(uint256 deadline_) external auth {
         deadline = deadline_;
         emit SetDeadline(deadline);
     }
 
+    /// @inheritdoc IRecyclerStorageV1
     function setFee(uint256 fee_) external auth {
         require(fee <= CEIL_FEE, "Fee too large");
         fee = fee_;
         emit SetFee(fee);
     }
 
+    /// @inheritdoc IRecyclerStorageV1
     function setMaintainer(address maintainer_) external auth {
         maintainer = maintainer_;
         emit SetMaintainer(maintainer);
     }
 
+    /// @inheritdoc IRecyclerStorageV1
     function setRate(uint256 rate_) external auth {
         require(rate_ <= CEIL_RATE, "Rate too large");
         rate = rate_;
