@@ -182,6 +182,7 @@ contract RecyclerVaultV1 is IRecyclerVaultV1, ERC1967Implementation, RecyclerSto
         balanceOf[to] += shares;
 
         _deposit(assets);
+        emit Deposit(msg.sender, to, assets, shares);
     }
 
     /// @inheritdoc IRecyclerVaultV1Actions
@@ -201,6 +202,7 @@ contract RecyclerVaultV1 is IRecyclerVaultV1, ERC1967Implementation, RecyclerSto
         requestOf[from].assets += assets.u224();
 
         _requestWithdrawal(requested + assets);
+        emit Request(msg.sender, from, assets, shares);
     }
 
     /// @inheritdoc IERC4626
@@ -216,6 +218,7 @@ contract RecyclerVaultV1 is IRecyclerVaultV1, ERC1967Implementation, RecyclerSto
         requestOf[from].cycle = (requestOf[from].assets == 0) ? 0 : requestOf[from].cycle;
 
         _pay(asset, address(this), to, assets);
+        emit Withdraw(msg.sender, to, from, assets, shares);
     }
 
     /**
@@ -246,7 +249,13 @@ contract RecyclerVaultV1 is IRecyclerVaultV1, ERC1967Implementation, RecyclerSto
     function cache() public auth {
         totalSupplyCache = totalSupply;
         totalAssetsCache = totalAssets();
-        // missing event
+
+        emit Cached(
+            msg.sender,
+            IManager(manager).getCurrentCycleIndex(),
+            totalSupplyCache,
+            totalAssetsCache
+        );
     }
 
     /// @inheritdoc IRecyclerVaultV1Actions
@@ -338,6 +347,7 @@ contract RecyclerVaultV1 is IRecyclerVaultV1, ERC1967Implementation, RecyclerSto
     /// @notice Helper approve function.
     function _approve(address owner, address spender, uint256 coins) internal {
         allowance[owner][spender] = coins;
+        emit Approval(owner, spender, coins);
     }
 
     /// @notice Decreases allowance - useful for burning, exiting, etc.
