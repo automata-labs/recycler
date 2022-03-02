@@ -160,13 +160,22 @@ contract RecyclerVaultV1 is IRecyclerVaultV1, ERC1967Implementation, RecyclerSto
     }
 
     /// @inheritdoc IERC20
-    function transfer(address, uint256) external pure returns (bool) {
-        revert("Transfer not supported");
+    function transfer(address to, uint256 shares) external returns (bool) {
+        balanceOf[msg.sender] -= shares;
+        unchecked { balanceOf[to] += shares; }
+        emit Transfer(msg.sender, to, shares);
+
+        return true;
     }
 
     /// @inheritdoc IERC20
-    function transferFrom(address, address, uint256) external pure returns (bool) {
-        revert("Transfer not supported");
+    function transferFrom(address from, address to, uint256 shares) external returns (bool) {
+        _decreaseAllowance(from, shares);
+        balanceOf[from] -= shares;
+        unchecked { balanceOf[to] += shares; }
+        emit Transfer(from, to, shares);
+
+        return true;
     }
 
     /// @inheritdoc IERC20
