@@ -4,12 +4,13 @@ pragma solidity ^0.8.0;
 import "ds-test/test.sol";
 import "yield-utils-v2/token/IERC20.sol";
 
+import "../../interfaces/external/IManager.sol";
 import "../../interfaces/external/IOnChainVoteL1.sol";
 import "../../interfaces/external/IRewards.sol";
-import "../mocks/Rewards.sol";
-import "../mocks/RewardsHash.sol";
-import "../mocks/TokeVotePool.sol";
-import "../mocks/TokeVotePool.sol";
+import "../../interfaces/external/IRewardsHash.sol";
+import "../../interfaces/external/IStaking.sol";
+import "../../interfaces/external/ITokeVotePool.sol";
+import "../../interfaces/v0/IRecyclerVaultV0.sol";
 import "../utils/Vm.sol";
 
 contract Utilities is DSTest, Vm {
@@ -23,11 +24,14 @@ contract Utilities is DSTest, Vm {
         privateKey: 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
     });
 
+    IManager public manager = IManager(0xA86e412109f77c45a3BC1c5870b880492Fb86A14);
     IOnChainVoteL1 public onchainvote = IOnChainVoteL1(0x43094eD6D6d214e43C31C38dA91231D2296Ca511);
-    Rewards public rewards = Rewards(0x79dD22579112d8a5F7347c5ED7E609e60da713C5);
-    RewardsHash public rewardsHash = RewardsHash(0x5ec3EC6A8aC774c7d53665ebc5DDf89145d02fB6);
+    IRecyclerVaultV0 public recyclerV0 = IRecyclerVaultV0(0x707059006C9936d13064F15FA963a528eC98A055);
+    IRewards public rewards = IRewards(0x79dD22579112d8a5F7347c5ED7E609e60da713C5);
+    IRewardsHash public rewardsHash = IRewardsHash(0x5ec3EC6A8aC774c7d53665ebc5DDf89145d02fB6);
+    IStaking public staking = IStaking(0x96F98Ed74639689C3A11daf38ef86E59F43417D3);
     IERC20 public toke = IERC20(0x2e9d63788249371f1DFC918a52f8d799F4a38C94);
-    TokeVotePool public tokeVotePool = TokeVotePool(0xa760e26aA76747020171fCF8BdA108dFdE8Eb930);
+    ITokeVotePool public tokeVotePool = ITokeVotePool(0xa760e26aA76747020171fCF8BdA108dFdE8Eb930);
 
     function realloc_toke(address account, uint256 amount) public {
         uint256 balance = toke.balanceOf(account);
@@ -45,6 +49,10 @@ contract Utilities is DSTest, Vm {
 
     function realloc_buffer(address recycler, uint256 amount) public {
         store(recycler, bytes32(uint256(10)), bytes32(uint256(amount)));
+    }
+
+    function realloc_current_cycle_index(uint256 currentCycleIndex) public {
+        store(address(manager), bytes32(uint256(102)), bytes32(uint256(currentCycleIndex)));
     }
 
     function realloc_epoch(

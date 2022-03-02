@@ -4,14 +4,14 @@ pragma solidity ^0.8.0;
 abstract contract Lock {
     error Locked();
 
-    bool public locked = false;
+    bool public __locked = false;
 
     modifier lock() {
-        if (locked)
+        if (__locked)
             revert Locked();
 
-        locked = true;
+        __locked = true;
         _;
-        locked = false;
+        __locked = false;
     }
 }

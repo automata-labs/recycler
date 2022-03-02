@@ -2,6 +2,8 @@
 pragma solidity ^0.8.0;
 
 interface ITokeVotePool {
+    function balanceOf(address account) external view returns (uint256);
+
     /// @dev Used for claiming and staking for compounding.
     function deposit(uint256 amount) external;
 
