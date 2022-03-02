@@ -41,9 +41,8 @@ contract RecyclerVaultV2Test is DSTest, Utilities {
             address(manager),
             type(uint256).max
         );
-        recycler.give(type(uint256).max);
 
-        // approves
+        // user approves
         toke.approve(address(recycler), type(uint256).max);
         startPrank(address(user0));
         toke.approve(address(recycler), type(uint256).max);
@@ -83,6 +82,7 @@ contract RecyclerVaultV2Test is DSTest, Utilities {
 
         recycler.migrate();
 
+        assertEq(recycler.totalAssets(), 566730110338940806517);
         assertEq(staking.balanceOf(address(recycler)), 566730110338940806517);
         assertEq(recycler.previewDeposit(1e18), 994594794303199892);
 
@@ -100,6 +100,19 @@ contract RecyclerVaultV2Test is DSTest, Utilities {
         // should fail when migrating twice
         expectRevert("Already migrated");
         recycler.migrate();
+    }
+
+    function testMigrateAndDepositAfter() public {
+        startPrank(0x7955e5db4327A7C530c5AdCA39575a44982f0793);
+        recyclerV0.allow(address(recycler));
+        stopPrank();
+
+        recycler.migrate();
+
+        realloc_toke(address(this), 10e18);
+        recycler.deposit(10e18, address(this));
+        assertEq(recycler.balanceOf(address(this)), 9945947943031998925);
+        assertEq(recycler.assetsOf(address(this)), 9999999999999999999);
     }
 
     /**
