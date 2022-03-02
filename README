@@ -1,0 +1,8 @@
+(Re)cycler
+
+The (Re)cycler V1 vault compounds TOKE rewards and algorithmically votes
+on the highest earning reactors. The vault partially implements the
+EIP-4626 Tokenized Vault Standard.
+
+`recycler` is released under "GPL Version 3" license.
+Copyright (c) 2022 Automata Labs Inc.
