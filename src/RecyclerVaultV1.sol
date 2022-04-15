@@ -396,7 +396,7 @@ contract RecyclerVaultV1 is IRecyclerVaultV1, ERC1967Implementation, RecyclerSto
         bytes32 s
     ) external auth {
         claim(chainId_, cycle_, wallet_, amount_, v, r, s);
-        stake(_balanceOf(asset, address(this)));
+        stake(amount_);
         rollover();
     }
 
